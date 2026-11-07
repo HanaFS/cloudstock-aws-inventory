@@ -1,0 +1,154 @@
+<section id="view-users" class="page-section">
+  <div class="section-header">
+    <div>
+      <h2>Quản lý Người dùng</h2>
+      <p>Quản trị danh sách tài khoản thủ kho trên Amazon Cognito User Pool</p>
+    </div>
+    <button type="button" class="btn btn-primary" onclick="AuthModule.openCreateUserModal()">
+      Thêm tài khoản mới
+    </button>
+  </div>
+
+  <div id="user-access-denied" class="login-error access-denied-box hidden">
+    <h3 class="access-denied-title">Truy cập bị từ chối (403 Forbidden)</h3>
+    <p>Chỉ người dùng có vai trò <strong>Admin (Quản trị viên)</strong> mới có quyền truy cập và thao tác trên danh mục Người dùng Cognito.</p>
+  </div>
+
+  <div id="user-management-content">
+    <div class="stats-grid">
+      <div class="stat-card sc-primary">
+        <div class="stat-label">Tổng tài khoản</div>
+        <div class="stat-value" id="stat-user-total">0</div>
+        <div class="stat-sub">Cognito User Pool</div>
+      </div>
+      <div class="stat-card sc-info">
+        <div class="stat-label">Quản trị viên</div>
+        <div class="stat-value" id="stat-user-admin">0</div>
+        <div class="stat-sub">Admin Group</div>
+      </div>
+      <div class="stat-card sc-success">
+        <div class="stat-label">Thủ kho</div>
+        <div class="stat-value" id="stat-user-staff">0</div>
+        <div class="stat-sub">Staff Group</div>
+      </div>
+      <div class="stat-card sc-danger">
+        <div class="stat-label">Tài khoản bị khóa</div>
+        <div class="stat-value text-danger" id="stat-user-locked">0</div>
+        <div class="stat-sub">Trạng thái LOCKED</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Danh sách Tài khoản Thủ kho</h3>
+        <span class="badge badge-neutral" id="user-total-badge">0 tài khoản</span>
+      </div>
+      <div class="card-body">
+        <div class="toolbar toolbar-card-filter">
+          <input
+            type="text"
+            id="user-search-input"
+            class="form-input search-input-medium"
+            placeholder="Tìm theo username, họ tên, email..."
+          >
+          <select id="user-filter-role" class="form-select filter-select-sm">
+            <option value="ALL">Tất cả vai trò</option>
+            <option value="Admin">Chỉ Admin</option>
+            <option value="Staff">Chỉ Staff</option>
+          </select>
+          <select id="user-filter-status" class="form-select filter-select-sm">
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="ACTIVE">Chỉ ACTIVE</option>
+            <option value="LOCKED">Chỉ LOCKED</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-reset-user-filter">
+            Đặt lại bộ lọc
+          </button>
+        </div>
+
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Cognito ID</th>
+              <th>Username</th>
+              <th>Họ và tên</th>
+              <th>Email</th>
+              <th>Vai trò</th>
+              <th>Trạng thái</th>
+              <th class="col-actions">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="user-table-body">
+            <tr>
+              <td colspan="7" class="col-c text-muted cell-padded">Đang tải danh sách tài khoản...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="modal-backdrop" id="modal-create-user">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h3>Tạo tài khoản Người dùng mới</h3>
+      <button type="button" class="modal-close" onclick="AuthModule.closeCreateUserModal()">Đóng</button>
+    </div>
+    <form id="form-create-user">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="new-user-username">
+            Tên đăng nhập <span class="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="new-user-username"
+            class="form-input"
+            placeholder="vd: staff.nam"
+            required
+          >
+          <div class="form-help">Dùng chữ thường, số và dấu chấm. Không dấu tiếng Việt.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-user-fullname">
+            Họ và tên <span class="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="new-user-fullname"
+            class="form-input"
+            placeholder="vd: Nguyễn Văn Nam"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-user-email">
+            Email <span class="required">*</span>
+          </label>
+          <input
+            type="email"
+            id="new-user-email"
+            class="form-input"
+            placeholder="vd: nam.nguyen@cloudstock.vn"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-user-role">Vai trò</label>
+          <select id="new-user-role" class="form-select">
+            <option value="Staff">Staff (Thủ kho)</option>
+            <option value="Admin">Admin (Quản trị viên)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="AuthModule.closeCreateUserModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Xác nhận tạo</button>
+      </div>
+    </form>
+  </div>
+</div>

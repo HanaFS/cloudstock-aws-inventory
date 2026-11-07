@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng nhập - CloudStock</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-brand">
+      <h1>CloudStock</h1>
+      <p>Hệ thống Quản lý Kho Serverless</p>
+    </div>
+
+    <div id="login-error" class="login-error"></div>
+
+    <form id="login-form" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="login-username">Tên đăng nhập</label>
+        <input
+          type="text"
+          id="login-username"
+          class="form-input"
+          placeholder="Nhập username"
+          autocomplete="username"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="login-password">Mật khẩu</label>
+        <input
+          type="password"
+          id="login-password"
+          class="form-input"
+          placeholder="Nhập mật khẩu"
+          autocomplete="current-password"
+          required
+        >
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="btn-login">
+        Đăng nhập
+      </button>
+    </form>
+
+    <hr class="login-divider">
+
+    <div class="login-hint">
+      <p class="login-hint-title">Tài khoản demo &mdash; Mật khẩu: 1</p>
+      <table class="login-hint-table">
+        <thead>
+          <tr>
+            <th>Vai trò</th>
+            <th>Username</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="hint-accounts">
+          <tr data-user="admin.nguyen">
+            <td class="hint-role">Admin</td>
+            <td>admin.nguyen</td>
+            <td class="hint-active">ACTIVE</td>
+          </tr>
+          <tr data-user="staff.tran">
+            <td class="hint-role">Staff</td>
+            <td>staff.tran</td>
+            <td class="hint-active">ACTIVE</td>
+          </tr>
+          <tr data-user="staff.pham">
+            <td class="hint-role">Staff</td>
+            <td>staff.pham</td>
+            <td class="hint-locked">LOCKED</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>

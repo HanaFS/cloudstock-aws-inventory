@@ -1,0 +1,214 @@
+<section id="view-inventory" class="page-section">
+  <div class="section-header">
+    <div>
+      <h2>Nghiệp vụ Kho (Inventory Operations)</h2>
+      <p>Lập phiếu nhập/xuất kho, cập nhật DynamoDB, tải chứng từ S3 và giám sát an toàn tồn kho</p>
+    </div>
+  </div>
+
+  <div class="sub-tabs">
+    <button
+      type="button"
+      class="sub-tab-btn active"
+      id="tab-btn-inbound"
+      onclick="InventoryModule.switchSubTab('in')"
+    >
+      Tạo Phiếu Nhập Kho (Inbound / Goods Receipt)
+    </button>
+    <button
+      type="button"
+      class="sub-tab-btn"
+      id="tab-btn-outbound"
+      onclick="InventoryModule.switchSubTab('out')"
+    >
+      Tạo Phiếu Xuất Kho (Outbound / Goods Issue)
+    </button>
+  </div>
+
+  <div id="panel-inbound" class="card card-mb">
+    <div class="card-header">
+      <h3>Lập Phiếu Nhập Kho (Inbound)</h3>
+      <span class="badge badge-in">Giao dịch IN</span>
+    </div>
+    <div class="card-body padded">
+      <form id="form-inbound">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inv-in-product">
+              Sản phẩm nhập <span class="required">*</span>
+            </label>
+            <select id="inv-in-product" class="form-select" required>
+              <option value="">-- Chọn sản phẩm nhập --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inv-in-supplier">Nhà cung cấp giao hàng</label>
+            <select id="inv-in-supplier" class="form-select">
+              <option value="">-- Chọn nhà cung cấp --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="info-summary-box hidden" id="inv-in-prod-info">
+          <div>
+            <span class="info-item-label">Tồn kho hiện tại</span>
+            <span class="info-item-value" id="inv-in-current-qty">0</span>
+          </div>
+          <div>
+            <span class="info-item-label">Ngưỡng tối thiểu an toàn</span>
+            <span class="info-item-value text-muted" id="inv-in-min-qty">0</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inv-in-amount">
+              Số lượng nhập (Số nguyên dương) <span class="required">*</span>
+            </label>
+            <input
+              type="number"
+              id="inv-in-amount"
+              class="form-input"
+              min="1"
+              placeholder="vd: 100"
+              required
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inv-in-note">Ghi chú nhập kho</label>
+            <input
+              type="text"
+              id="inv-in-note"
+              class="form-input"
+              placeholder="vd: Nhập hàng định kỳ theo hợp đồng số 42..."
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Đính kèm Hóa đơn / Biên bản giao nhận (Amazon S3 Pre-signed URL)</label>
+          <div class="dropzone" id="inv-invoice-dropzone">
+            <div class="dropzone-label" id="inv-dropzone-text">
+              Kéo thả hóa đơn / chứng từ (PDF, JPG, PNG) hoặc bấm để chọn tệp
+            </div>
+            <div class="dropzone-hint">Hệ thống tự động tạo Pre-signed URL để tải trực tiếp lên Amazon S3 Bucket</div>
+          </div>
+          <input type="file" id="inv-invoice-file-input" accept="image/*,.pdf" class="file-input-hidden">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-submit-spaced">
+          Xác nhận Nhập Kho (+ Tăng tồn kho)
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="panel-outbound" class="card card-mb hidden">
+    <div class="card-header">
+      <h3>Lập Phiếu Xuất Kho (Outbound)</h3>
+      <span class="badge badge-out">Giao dịch OUT</span>
+    </div>
+    <div class="card-body padded">
+      <form id="form-outbound">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inv-out-product">
+              Sản phẩm cần xuất <span class="required">*</span>
+            </label>
+            <select id="inv-out-product" class="form-select" required>
+              <option value="">-- Chọn sản phẩm xuất --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inv-out-amount">
+              Số lượng xuất <span class="required">*</span>
+            </label>
+            <input
+              type="number"
+              id="inv-out-amount"
+              class="form-input"
+              min="1"
+              placeholder="vd: 20"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="info-summary-box hidden" id="inv-out-prod-info">
+          <div>
+            <span class="info-item-label">Tồn kho khả dụng</span>
+            <span class="info-item-value" id="inv-out-current-qty">0</span>
+          </div>
+          <div>
+            <span class="info-item-label">Ngưỡng tối thiểu an toàn</span>
+            <span class="info-item-value text-muted" id="inv-out-min-qty">0</span>
+          </div>
+        </div>
+
+        <div id="inv-out-warning-box" class="login-error hidden"></div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="inv-out-reason-type">
+              Lý do xuất kho <span class="required">*</span>
+            </label>
+            <select id="inv-out-reason-type" class="form-select" required>
+              <option value="Xuất bán khách hàng">Xuất bán khách hàng</option>
+              <option value="Xuất chuyển chi nhánh">Xuất chuyển chi nhánh</option>
+              <option value="Xuất hủy do hư hỏng/hết hạn">Xuất hủy do hư hỏng/hết hạn</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inv-out-note">Ghi chú chi tiết</label>
+            <input
+              type="text"
+              id="inv-out-note"
+              class="form-input"
+              placeholder="vd: Xuất cho Chi nhánh Đà Nẵng, Đơn hàng #109..."
+            >
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="btn btn-danger btn-submit-spaced"
+          id="btn-submit-outbound"
+        >
+          Xác nhận Xuất Kho (- Giảm tồn kho)
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>5 Phiếu Nhập / Xuất thực hiện gần nhất</h3>
+      <span class="badge badge-neutral">Đối chiếu tức thì</span>
+    </div>
+    <div class="card-body">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Mã GD</th>
+            <th>Loại GD</th>
+            <th>Mã SP</th>
+            <th>Tên mặt hàng</th>
+            <th>Lý do / Ghi chú</th>
+            <th>Người thực hiện</th>
+            <th class="col-c">Chứng từ</th>
+          </tr>
+        </thead>
+        <tbody id="inv-recent-table-body">
+          <tr>
+            <td colspan="8" class="col-c text-muted cell-padded">Đang tải lịch sử giao dịch gần đây...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

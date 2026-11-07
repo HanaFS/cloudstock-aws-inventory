@@ -1,0 +1,44 @@
+# === OS Generated Files ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# === IDE / Editor ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# === Python / Backend ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.env.*
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# === Logs & Temp ===
+*.log
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# === AWS ===
+.aws-sam/
+samconfig.toml
+

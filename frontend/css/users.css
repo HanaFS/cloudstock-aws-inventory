@@ -1,0 +1,48 @@
+/* Profile Information Grid */
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.profile-field {
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--border-light);
+}
+.profile-field:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.profile-label {
+  display: block;
+  font-size: .6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-secondary);
+  margin-bottom: var(--s1);
+}
+
+.profile-value {
+  font-size: .9375rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Access Denied (403 Forbidden Box) */
+.access-denied-box {
+  padding: var(--s6) !important;
+  text-align: center !important;
+}
+
+.access-denied-title {
+  color: var(--danger) !important;
+  margin-bottom: var(--s2) !important;
+}
+
+@media (max-width: 1024px) {
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

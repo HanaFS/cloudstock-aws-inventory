@@ -1,0 +1,286 @@
+/* Amazon CloudWatch Logs Console (Dark Terminal Theme) */
+.cloudwatch-terminal {
+  background: #0b1120 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.cloudwatch-header {
+  border-bottom-color: #1e293b !important;
+  background: #0f172a !important;
+}
+
+.cloudwatch-title {
+  color: #f8fafc !important;
+}
+
+.cloudwatch-subtitle {
+  font-size: 0.6875rem !important;
+  color: #94a3b8 !important;
+  margin-top: 2px;
+}
+
+.cloudwatch-btn-fetch {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+.cloudwatch-btn-fetch:hover {
+  background: #334155 !important;
+}
+
+.cloudwatch-toolbar {
+  padding: var(--s4) var(--s5);
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+
+.cloudwatch-toolbar-left {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cloudwatch-input {
+  max-width: 280px !important;
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.cloudwatch-select {
+  max-width: 160px !important;
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.cloudwatch-stats {
+  display: flex;
+  gap: var(--s3);
+  font-size: 0.75rem;
+  font-family: var(--ff-mono);
+}
+
+.stat-info-badge  { color: #38bdf8; font-weight: 700; }
+.stat-warn-badge  { color: #fbbf24; font-weight: 700; }
+.stat-error-badge { color: #f87171; font-weight: 700; }
+
+.cloudwatch-body {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.cloudwatch-table {
+  color: #e2e8f0;
+}
+
+.cloudwatch-thead-tr {
+  background: #0f172a !important;
+  border-bottom: 1px solid #1e293b !important;
+}
+
+.cloudwatch-row-error {
+  background: rgba(220, 38, 38, 0.15) !important;
+  border-left: 3px solid #dc2626 !important;
+}
+
+.cloudwatch-row-warn {
+  background: rgba(217, 119, 6, 0.15) !important;
+  border-left: 3px solid #d97706 !important;
+}
+
+.cloudwatch-row-info {
+  border-left: 3px solid #0284c7 !important;
+}
+
+.cloudwatch-th {
+  color: #94a3b8 !important;
+  background: #0f172a !important;
+  border-bottom: 1px solid #1e293b !important;
+}
+
+.cloudwatch-cell-time {
+  white-space: nowrap;
+  color: #94a3b8;
+}
+.cloudwatch-cell-stream {
+  color: #cbd5e1;
+}
+.cloudwatch-cell-msg {
+  color: #f1f5f9;
+  word-break: break-word;
+}
+
+/* =========================================================
+   PDF EXPORT REPORT STYLING
+   ========================================================= */
+.pdf-report-container {
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+}
+
+.pdf-report-header {
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.pdf-report-title {
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 0;
+  color: #0f172a;
+}
+
+.pdf-report-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  margin: 4px 0 0 0;
+}
+
+.pdf-report-meta {
+  text-align: right;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.pdf-summary-grid {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 11px;
+}
+
+.pdf-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 12px;
+  flex: 1;
+}
+
+.pdf-summary-in {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+.pdf-summary-out {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+.pdf-summary-label {
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: 9px;
+  font-weight: 600;
+}
+.pdf-summary-label-in {
+  color: #16a34a !important;
+}
+.pdf-summary-label-out {
+  color: #d97706 !important;
+}
+
+.pdf-summary-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+.pdf-summary-value-in {
+  color: #16a34a !important;
+}
+.pdf-summary-value-out {
+  color: #d97706 !important;
+}
+
+.pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.pdf-thead-tr {
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.pdf-th {
+  padding: 6px;
+  text-align: left;
+}
+.pdf-th-r {
+  padding: 6px;
+  text-align: right;
+}
+.pdf-th-c {
+  padding: 6px;
+  text-align: center;
+}
+
+.pdf-tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pdf-td {
+  padding: 6px;
+}
+.pdf-td-r {
+  padding: 6px;
+  text-align: right;
+  font-family: monospace;
+}
+.pdf-td-c {
+  padding: 6px;
+  text-align: center;
+}
+
+.pdf-notice {
+  font-size: 9px;
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.pdf-sign-row {
+  margin-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.pdf-sign-box {
+  text-align: center;
+  width: 160px;
+}
+
+.pdf-sign-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.pdf-sign-name {
+  margin-top: 40px;
+  font-weight: 500;
+}
+
+.pdf-footer {
+  margin-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+  font-size: 9px;
+  color: #94a3b8;
+  display: flex;
+  justify-content: space-between;
+}

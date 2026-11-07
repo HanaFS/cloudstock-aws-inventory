@@ -1,0 +1,22 @@
+.dashboard-charts-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--s6);
+  margin-bottom: var(--s7);
+}
+
+.chart-container {
+  position: relative;
+  height: 280px;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .chart-container {
+    height: 240px;
+  }
+}
+

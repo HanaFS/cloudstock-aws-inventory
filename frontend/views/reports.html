@@ -1,0 +1,141 @@
+<section id="view-reports" class="page-section">
+  <div class="section-header">
+    <div>
+      <h2>Báo cáo &amp; Tra cứu Hệ thống</h2>
+      <p>Tra cứu lịch sử giao dịch kho trên DynamoDB và giám sát Nhật ký Amazon CloudWatch thời gian thực</p>
+    </div>
+  </div>
+
+  <div class="card card-mb-lg">
+    <div class="card-header">
+      <div>
+        <h3>1. Lịch sử Giao dịch Kho (DynamoDB Transactions)</h3>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="ReportsModule.exportExcel()">
+          Xuất Excel (.xlsx)
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="ReportsModule.exportPDF()">
+          Xuất PDF (.pdf)
+        </button>
+        <span class="badge badge-neutral" id="report-txn-count-badge">0 giao dịch</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="toolbar toolbar-card-filter">
+        <input
+          type="text"
+          id="report-search-txn"
+          class="form-input search-input-medium"
+          placeholder="Tìm theo mã GD, mã/tên sản phẩm..."
+        >
+        <select id="report-filter-type" class="form-select filter-select-sm">
+          <option value="ALL">Tất cả loại thao tác</option>
+          <option value="IN">Chỉ Nhập kho (IN)</option>
+          <option value="OUT">Chỉ Xuất kho (OUT)</option>
+        </select>
+        <select id="report-filter-performer" class="form-select filter-select-md">
+          <option value="ALL">Tất cả người thực hiện</option>
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-reset-report-txn">
+          Đặt lại bộ lọc
+        </button>
+      </div>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Mã GD</th>
+            <th>Ngày giờ</th>
+            <th>Người thực hiện</th>
+            <th>Loại thao tác</th>
+            <th>Mã hàng</th>
+            <th>Tên hàng</th>
+            <th class="col-r">Số lượng</th>
+            <th>Lý do / Nhà cung cấp</th>
+            <th class="col-c">Hóa đơn S3</th>
+          </tr>
+        </thead>
+        <tbody id="report-txn-table-body">
+          <tr>
+            <td colspan="9" class="col-c text-muted cell-padded">Đang tải lịch sử giao dịch kho...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card cloudwatch-terminal">
+    <div class="card-header cloudwatch-header">
+      <div>
+        <h3 class="cloudwatch-title">2. Nhật ký Hệ thống Đám mây (Amazon CloudWatch Logs)</h3>
+        <p class="cloudwatch-subtitle">
+          Log Group: /aws/cloudstock/serverless &bull; Region: ap-southeast-1
+        </p>
+      </div>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          id="btn-simulate-cloudwatch-event"
+        >
+          Giả lập sự kiện S3 Trigger / Cảnh báo lỗi
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm cloudwatch-btn-fetch"
+          id="btn-refresh-cloudwatch-logs"
+        >
+          Làm mới Log (Fetch CloudWatch)
+        </button>
+      </div>
+    </div>
+
+    <div class="cloudwatch-toolbar">
+      <div class="cloudwatch-toolbar-left">
+        <input
+          type="text"
+          id="report-search-log"
+          class="form-input cloudwatch-input"
+          placeholder="Lọc log stream hoặc message..."
+        >
+        <select
+          id="report-filter-log-level"
+          class="form-select cloudwatch-select"
+        >
+          <option value="ALL">ALL LEVELS</option>
+          <option value="INFO">INFO ONLY</option>
+          <option value="WARN">WARN ONLY</option>
+          <option value="ERROR">ERROR ONLY</option>
+        </select>
+      </div>
+
+      <div class="cloudwatch-stats">
+        <span>Tổng: <strong id="log-count-all">0</strong></span>
+        <span>INFO: <strong id="log-count-info" class="stat-info-badge">0</strong></span>
+        <span>WARN: <strong id="log-count-warn" class="stat-warn-badge">0</strong></span>
+        <span>ERROR: <strong id="log-count-error" class="stat-error-badge">0</strong></span>
+      </div>
+    </div>
+
+    <div class="card-body cloudwatch-body">
+      <table class="tbl cloudwatch-table">
+        <thead>
+          <tr class="cloudwatch-thead-tr">
+            <th class="cloudwatch-th">Thời gian (ISO)</th>
+            <th class="cloudwatch-th">Log Stream</th>
+            <th class="cloudwatch-th col-c">Mức độ</th>
+            <th class="cloudwatch-th">Nội dung chi tiết (Message)</th>
+          </tr>
+        </thead>
+        <tbody id="report-log-table-body">
+          <tr>
+            <td colspan="4" class="col-c text-muted cell-padded">
+              Đang tải CloudWatch log events...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

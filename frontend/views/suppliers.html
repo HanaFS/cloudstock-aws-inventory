@@ -1,0 +1,124 @@
+<section id="view-suppliers" class="page-section">
+  <div class="section-header">
+    <div>
+      <h2>Quản lý Nhà Cung Cấp</h2>
+      <p>Quản lý mạng lưới đối tác cung ứng và các sản phẩm liên kết</p>
+    </div>
+    <button type="button" class="btn btn-primary" onclick="SuppliersModule.openCreateModal()">
+      Thêm nhà cung cấp
+    </button>
+  </div>
+
+  <div class="toolbar">
+    <input
+      type="text"
+      id="search-supplier-input"
+      class="form-input search-input-wide"
+      placeholder="Tìm theo tên đối tác, mã NCC, số điện thoại..."
+    >
+    <div class="toolbar-spacer"></div>
+    <span class="badge badge-neutral" id="supplier-total-badge">0 đối tác</span>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Mã NCC</th>
+            <th>Tên công ty / Đối tác</th>
+            <th>Số điện thoại</th>
+            <th>Địa chỉ</th>
+            <th>Sản phẩm liên kết</th>
+            <th class="col-actions">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="supplier-table-body">
+          <tr>
+            <td colspan="6" class="col-c text-muted cell-padded-lg">Đang tải danh sách nhà cung cấp...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="modal-backdrop" id="modal-supplier">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h3 id="modal-supplier-title">Thêm Nhà Cung Cấp Mới</h3>
+      <button type="button" class="modal-close" onclick="SuppliersModule.closeModal()">Đóng</button>
+    </div>
+    <form id="form-supplier">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="sup-form-id">
+            Mã nhà cung cấp <span class="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="sup-form-id"
+            class="form-input"
+            placeholder="vd: sup-005"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="sup-form-name">
+            Tên công ty / Đối tác <span class="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="sup-form-name"
+            class="form-input"
+            placeholder="vd: Công ty TNHH Thương Mại Kỹ Thuật ABC"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="sup-form-phone">Số điện thoại liên hệ</label>
+          <input
+            type="text"
+            id="sup-form-phone"
+            class="form-input"
+            placeholder="vd: 028-3811-9999"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="sup-form-address">Địa chỉ trụ sở</label>
+          <textarea
+            id="sup-form-address"
+            class="form-textarea"
+            placeholder="vd: 123 Cộng Hòa, Phường 12, Quận Tân Bình, TP.HCM"
+          ></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="SuppliersModule.closeModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu thông tin</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<div class="modal-backdrop" id="modal-confirm-delete-supplier">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h3>Xác nhận Xóa Nhà Cung Cấp</h3>
+      <button type="button" class="modal-close" onclick="SuppliersModule.closeDeleteModal()">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <p class="confirm-msg" id="confirm-delete-supplier-msg">
+        Bạn có chắc chắn muốn xóa nhà cung cấp này?
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="SuppliersModule.closeDeleteModal()">Hủy</button>
+      <button type="button" class="btn btn-danger" id="btn-exec-delete-supplier">Xác nhận Xóa</button>
+    </div>
+  </div>
+</div>
