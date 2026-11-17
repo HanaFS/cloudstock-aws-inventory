@@ -76,8 +76,13 @@ def get_iso_now():
 # ---- Bổ sung -------------------------------------------------------
 def get_request_info(event):
     """Trả về (METHOD, path) từ event của HTTP API (payload v2)."""
-    http = event.get("requestContext", {}).get("http", {})
-    return http.get("method", "GET").upper(), event.get("rawPath", "/")
+    ctx = event.get("requestContext", {})
+    path = event.get("rawPath", "/")
+    stage = ctx.get("stage")
+    # Stage mặc định ($default) không có tiền tố; stage có tên (vd "prod") thì rawPath bắt đầu bằng /prod/...
+    if stage and stage != "$default" and (path == f"/{stage}" or path.startswith(f"/{stage}/")):
+        path = path[len(stage) + 1:] or "/"
+    return ctx.get("http", {}).get("method", "GET").upper(), path
 
 
 def parse_body(event):
@@ -116,3 +121,114 @@ def run_ping(handler_name, user, check):
     except Exception as exc:  # noqa: BLE001
         return build_response(500, {"ok": False, "handler": handler_name,
                                     "error": f"{type(exc).__name__}: {exc}"})
+
+
+# ---- Bổ sung cho bản đầy đủ ------------------------------------------
+import re
+import uuid
+import logging
+from urllib.parse import unquote
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+class ApiError(Exception):
+    """Ném ra ở bất kỳ đâu trong handler -> tự đổi thành response {message} với mã lỗi tương ứng."""
+
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def run_handler(event, route_fn):
+    """Bọc handler: bắt ApiError -> 4xx; lỗi lạ -> ghi log đầy đủ + trả 500 (không lộ chi tiết)."""
+    method, path = get_request_info(event)
+    if method == "OPTIONS":
+        return build_response(200, {})
+    try:
+        return route_fn(method, path, get_current_user(event), event)
+    except ApiError as exc:
+        return build_response(exc.status, {"message": exc.message})
+    except Exception:  # noqa: BLE001
+        logger.exception("Unhandled error: %s %s", method, path)
+        return build_response(500, {"message": "Lỗi hệ thống, vui lòng thử lại sau"})
+
+
+def get_query(event):
+    return event.get("queryStringParameters") or {}
+
+
+def path_segments(path):
+    """'/products/PRD-001/' -> ['products', 'PRD-001'] (đã giải mã %xx)."""
+    return [unquote(p) for p in path.split("/") if p]
+
+
+def body_or_400(event):
+    body = parse_body(event)
+    if body is None or not isinstance(body, dict):
+        raise ApiError(400, "Body phải là JSON object hợp lệ")
+    return body
+
+
+def scan_all(table, **kwargs):
+    """Scan hết các trang (DynamoDB giới hạn 1 MB / lần scan)."""
+    items = []
+    resp = table.scan(**kwargs)
+    items.extend(resp.get("Items", []))
+    while "LastEvaluatedKey" in resp:
+        resp = table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"], **kwargs)
+        items.extend(resp.get("Items", []))
+    return items
+
+
+def clean_str(value, field, required=True, max_len=200):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        if required:
+            raise ApiError(400, f"Thiếu trường bắt buộc: {field}")
+        return None
+    if not isinstance(value, str):
+        raise ApiError(400, f"Trường {field} phải là chuỗi")
+    value = value.strip()
+    if len(value) > max_len:
+        raise ApiError(400, f"Trường {field} quá dài (tối đa {max_len} ký tự)")
+    return value
+
+
+def to_int(value, field, minimum=0):
+    """Số nguyên >= minimum. Chấp nhận 5, 5.0, '5'; từ chối True/False, 5.5, 'abc'."""
+    if isinstance(value, bool) or value is None:
+        raise ApiError(400, f"Trường {field} phải là số nguyên")
+    try:
+        number = Decimal(str(value))
+    except Exception:  # noqa: BLE001
+        raise ApiError(400, f"Trường {field} phải là số nguyên")
+    if not number.is_finite() or number % 1 != 0:
+        raise ApiError(400, f"Trường {field} phải là số nguyên")
+    number = int(number)
+    if number < minimum:
+        raise ApiError(400, f"Trường {field} phải >= {minimum}")
+    return number
+
+
+def to_number(value, field, minimum=0):
+    """Số thực >= minimum (dùng cho price)."""
+    if isinstance(value, bool) or value is None:
+        raise ApiError(400, f"Trường {field} phải là số")
+    try:
+        number = Decimal(str(value))
+    except Exception:  # noqa: BLE001
+        raise ApiError(400, f"Trường {field} phải là số")
+    if not number.is_finite() or number < minimum:
+        raise ApiError(400, f"Trường {field} phải là số >= {minimum}")
+    return int(number) if number % 1 == 0 else number
+
+
+def new_id(prefix):
+    return f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
+
+
+def public_url(key):
+    from urllib.parse import quote
+    return f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{quote(key)}"

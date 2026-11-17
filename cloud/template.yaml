@@ -415,6 +415,10 @@ Resources:
               Resource: !GetAtt ProductsTable.Arn
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt SuppliersTable.Arn
+            - Effect: Allow
+              Action:
                 - s3:GetObject
               Resource: !Sub "${AssetsBucket.Arn}/invoices/*"
             - Effect: Allow

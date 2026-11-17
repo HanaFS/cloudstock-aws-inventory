@@ -17,3 +17,7 @@ config.generated.js
 
 # File Word nội bộ (có thể chứa mật khẩu / thông số riêng)
 *.docx
+
+# Test
+.pytest_cache/
+.moto/

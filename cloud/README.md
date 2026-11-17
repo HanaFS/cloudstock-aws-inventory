@@ -40,7 +40,9 @@ flowchart LR
 template.yaml            # Toàn bộ hạ tầng (SAM)
 samconfig.toml           # Cấu hình deploy (stack, region)
 layers/common/python/    # Lambda Layer: build_response, JWT user, clients boto3...
-src/api_*_handler/app.py # 4 hàm Lambda (khung + endpoint /_ping kiểm tra kết nối)
+src/api_*_handler/app.py # 4 hàm Lambda đầy đủ nghiệp vụ (+ endpoint /_ping kiểm tra kết nối)
+tests/                   # 67 test tự động (moto giả lập AWS), chạy: pytest tests
+API.md                   # Đặc tả chi tiết các endpoint
 seed/*.json              # Dữ liệu mẫu cho 3 bảng
 scripts/                 # seed.py, create_admin.py, get_token.py, print_config.py
 ```
@@ -99,7 +101,7 @@ sam deploy --parameter-overrides BucketName=qlkho-assets-nhom4-v2 ResourceSuffix
 
 **Frontend:** chạy `python scripts/print_config.py`, dán kết quả vào `frontend/js/config.js`.
 
-**Backend (viết code Lambda):** sửa trong `src/api_*_handler/app.py` (đã có TODO theo đặc tả API của nhóm), dùng chung `from common import *`. Deploy lại bằng `sam deploy`.
+**Backend:** code 4 hàm Lambda đã viết đầy đủ theo đặc tả API của nhóm (xem `API.md`). Mỗi hàm nằm ở `src/api_*_handler/app.py`, dùng chung `from common import *`. Sửa xong chạy `pytest tests` rồi `sam build && sam deploy`.
 Cập nhật nhanh 1 hàm khi đang phát triển:
 ```bash
 aws lambda update-function-code --function-name api-products-handler --zip-file fileb://function.zip
@@ -112,11 +114,20 @@ aws lambda update-function-code --function-name api-products-handler --zip-file 
 | api-products-handler | `/products*`, `/suppliers*` | DynamoDB CRUD Products/Suppliers, S3 `products/*` `invoices/*` |
 | api-transactions-handler | `/transactions*` | DynamoDB Transactions + cập nhật Products, S3 đọc `invoices/*`, CloudWatch Logs |
 
-Lưu ý cho backend:
-- JWT Authorizer chỉ **xác thực**; phân quyền Admin/Staff phải kiểm tra trong code (`require_role`).
-- Xuất kho nên dùng `ConditionExpression: stockQuantity >= :q` (hoặc `transact_write_items`) để không âm kho khi nhiều người thao tác cùng lúc.
+Các điểm kỹ thuật đã xử lý trong code:
+- JWT Authorizer chỉ **xác thực**; phân quyền Admin/Staff được kiểm tra trong code (`require_role`).
+- **Chống âm kho:** nhập/xuất kho cập nhật tồn + ghi phiếu trong một `transact_write_items`, có điều kiện "tồn kho chưa bị ai đổi từ lúc đọc"; nếu có người khác thao tác cùng lúc thì đọc lại và thử lại.
 - Presigned URL: `ContentType` lúc tạo phải khớp lúc frontend PUT; `s3_client` trong `common.py` đã cấu hình s3v4 đúng region.
-- Bảng `Transactions` có PK `transactionId`; muốn truy vấn theo sản phẩm hãy dùng GSI `productId-createdAt-index`.
+- Truy vấn giao dịch theo sản phẩm dùng GSI `productId-createdAt-index` (không phải quét cả bảng).
+- Admin không thể tự xóa / tự khóa / tự hạ quyền chính mình.
+
+## Kiểm thử
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests
+```
+Các test chạy trên AWS giả lập (moto), không cần tài khoản AWS và không tốn phí; gồm cả tình huống 2 người xuất kho cùng lúc.
 
 ## Bảo mật
 
