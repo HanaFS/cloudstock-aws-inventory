@@ -20,20 +20,40 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from common import *
 
-TX_TYPES = ("IMPORT", "EXPORT")
+TX_TYPES = ("IMPORT", "EXPORT", "IN", "OUT")
 MAX_RETRIES = 5
 VIEW_URL_TTL = 300  # giây
+SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "")
+sns_client = boto3.client("sns", region_name=REGION)
 # Client của resource đã tự chuyển kiểu Python <-> DynamoDB, nên truyền thẳng giá trị Python thường
 # (KHÔNG dùng TypeSerializer ở đây, nếu không dữ liệu sẽ bị bọc kiểu 2 lần và ghi sai).
 _ddb_client = dynamodb.meta.client
+
+
+def _normalize_tx(item):
+    if not item:
+        return item
+    qty = item.get("quantity") if "quantity" in item else item.get("amount", 0)
+    item["quantity"] = qty
+    item["amount"] = qty
+    ts = item.get("createdAt") or item.get("timestamp") or get_iso_now()
+    item["createdAt"] = ts
+    item["timestamp"] = ts
+    if "invoiceUrl" in item and "invoiceKey" not in item:
+        item["invoiceKey"] = item["invoiceUrl"]
+    elif "invoiceKey" in item and "invoiceUrl" not in item:
+        item["invoiceUrl"] = item["invoiceKey"]
+    return item
 
 
 # --------------------------------------------------------------------- list
 def _list_transactions(query):
     tx_type = query.get("type")
     product_id = query.get("productId")
-    if tx_type and tx_type not in TX_TYPES:
-        raise ApiError(400, "type chỉ nhận IMPORT hoặc EXPORT")
+    if tx_type:
+        tx_type_upper = tx_type.upper()
+        if tx_type_upper not in TX_TYPES:
+            raise ApiError(400, "type chỉ nhận IN/OUT hoặc IMPORT/EXPORT")
 
     if product_id:
         # Dùng GSI productId-createdAt-index: không phải quét cả bảng, và đã sắp xếp sẵn.
@@ -55,15 +75,15 @@ def _list_transactions(query):
             kwargs = {"FilterExpression": "#t = :t", "ExpressionAttributeNames": {"#t": "type"},
                       "ExpressionAttributeValues": {":t": tx_type}}
         items = scan_all(transactions_table, **kwargs)
-    items.sort(key=lambda i: i.get("createdAt", ""), reverse=True)
-    return build_response(200, items)
+    items.sort(key=lambda i: i.get("createdAt", "") or i.get("timestamp", ""), reverse=True)
+    return build_response(200, [_normalize_tx(i) for i in items])
 
 
 def _get_transaction(transaction_id):
     resp = transactions_table.query(KeyConditionExpression=Key("transactionId").eq(transaction_id))
     if not resp["Items"]:
         raise ApiError(404, f"Không tìm thấy giao dịch {transaction_id}")
-    return build_response(200, resp["Items"][0])
+    return build_response(200, _normalize_tx(resp["Items"][0]))
 
 
 # ------------------------------------------------------------------- create
@@ -84,18 +104,27 @@ def _normalize_invoice_key(value):
 
 
 def _create_transaction(body, user):
-    tx_type = clean_str(body.get("type"), "type")
-    if tx_type not in TX_TYPES:
-        raise ApiError(400, "type chỉ nhận IMPORT hoặc EXPORT")
+    raw_type = clean_str(body.get("type"), "type").upper()
+    if raw_type in ("IN", "IMPORT"):
+        txn_type = "IMPORT"
+    elif raw_type in ("OUT", "EXPORT"):
+        txn_type = "EXPORT"
+    else:
+        raise ApiError(400, f"type không hợp lệ: {raw_type} (chấp nhận IN/OUT hoặc IMPORT/EXPORT)")
+
     product_id = clean_str(body.get("productId"), "productId")
-    quantity = to_int(body.get("quantity"), "quantity", minimum=1)
+    raw_amount = body.get("amount") if "amount" in body else body.get("quantity")
+    if raw_amount is None:
+        raise ApiError(400, "Thiếu trường bắt buộc: amount hoặc quantity")
+    quantity = to_int(raw_amount, "amount/quantity", minimum=1)
 
     supplier_id = invoice_key = reason = None
-    if tx_type == "IMPORT":
-        supplier_id = clean_str(body.get("supplierId"), "supplierId")
-        if not suppliers_table.get_item(Key={"supplierId": supplier_id}).get("Item"):
+    if txn_type == "IMPORT":
+        supplier_id = clean_str(body.get("supplierId"), "supplierId", required=False)
+        if supplier_id and not suppliers_table.get_item(Key={"supplierId": supplier_id}).get("Item"):
             raise ApiError(400, f"Nhà cung cấp {supplier_id} không tồn tại")
-        invoice_key = _normalize_invoice_key(body.get("invoiceUrl"))
+        raw_inv = body.get("invoiceUrl") or body.get("invoiceKey")
+        invoice_key = _normalize_invoice_key(raw_inv)
     else:
         reason = clean_str(body.get("reason"), "reason", required=False, max_len=500) or "Xuất kho"
 
@@ -103,22 +132,25 @@ def _create_transaction(body, user):
         product = products_table.get_item(Key={"productId": product_id}).get("Item")
         if not product:
             raise ApiError(404, f"Không tìm thấy sản phẩm {product_id}")
-        old_stock = int(product["stockQuantity"])
-        if tx_type == "EXPORT" and quantity > old_stock:
+        old_stock = int(product.get("stockQuantity", product.get("quantity", 0)))
+        if txn_type == "EXPORT" and quantity > old_stock:
             raise ApiError(400, f"Không đủ tồn kho. Hiện có {old_stock}, yêu cầu xuất {quantity}")
-        new_stock = old_stock + quantity if tx_type == "IMPORT" else old_stock - quantity
+        new_stock = old_stock + quantity if txn_type == "IMPORT" else old_stock - quantity
         now = get_iso_now()
 
         record = {
             "transactionId": f"TXN-{now[:10].replace('-', '')}-{uuid.uuid4().hex[:6].upper()}",
             "createdAt": now,
-            "type": tx_type,
+            "timestamp": now,
+            "type": raw_type,
             "productId": product_id,
-            "productName": product["name"],
+            "productName": product.get("name", ""),
             "quantity": quantity,
-            "performedBy": user["email"],
+            "amount": quantity,
+            "performedBy": user.get("email", ""),
             "supplierId": supplier_id,
             "invoiceUrl": invoice_key,
+            "invoiceKey": invoice_key,
             "reason": reason,
         }
         try:
@@ -126,10 +158,10 @@ def _create_transaction(body, user):
                 {"Update": {
                     "TableName": TABLE_PRODUCTS,
                     "Key": {"productId": product_id},
-                    "UpdateExpression": "SET stockQuantity = :new, #s = :status, updatedAt = :now",
+                    "UpdateExpression": "SET stockQuantity = :new, #q = :new, #s = :status, updatedAt = :now",
                     # chỉ ghi nếu tồn kho chưa bị ai đổi từ lúc đọc (new_stock đã được kiểm tra >= 0 ở trên)
-                    "ConditionExpression": "stockQuantity = :old",
-                    "ExpressionAttributeNames": {"#s": "status"},
+                    "ConditionExpression": "stockQuantity = :old OR #q = :old",
+                    "ExpressionAttributeNames": {"#s": "status", "#q": "quantity"},
                     "ExpressionAttributeValues": {
                         ":new": new_stock, ":old": old_stock,
                         ":status": "IN_STOCK" if new_stock > 0 else "OUT_OF_STOCK",
@@ -146,8 +178,22 @@ def _create_transaction(body, user):
                 time.sleep(0.05)  # có người vừa đổi tồn kho -> đọc lại và thử lại
                 continue
             raise
+
+        # Gửi cảnh báo SNS nếu xuất kho chạm ngưỡng tối thiểu
+        min_threshold = int(product.get("minThreshold", 0))
+        if txn_type == "EXPORT" and new_stock <= min_threshold and SNS_TOPIC_ARN:
+            try:
+                sns_client.publish(
+                    TopicArn=SNS_TOPIC_ARN,
+                    Subject=f"[CloudStock] Cảnh báo tồn kho thấp: {product.get('name')}",
+                    Message=f"CẢNH BÁO TỒN KHO: Sản phẩm {product_id} ({product.get('name')}) giảm còn {new_stock} <= ngưỡng ({min_threshold})."
+                )
+            except Exception as exc:
+                logger.warning("SNS publish error: %s", exc)
+
         return build_response(201, {**record, "message": "Created",
                                     "stockQuantity": new_stock,
+                                    "quantity": new_stock,
                                     "status": "IN_STOCK" if new_stock > 0 else "OUT_OF_STOCK"})
     raise ApiError(409, "Kho đang được cập nhật bởi người khác, vui lòng thử lại")
 
@@ -198,7 +244,18 @@ def _logs(query):
 # ------------------------------------------------------------------- router
 def _route(method, path, user, event):
     parts = path_segments(path)
-    if not parts or parts[0] != "transactions":
+    if not parts:
+        raise ApiError(404, "Không tìm thấy đường dẫn")
+
+    if parts[0] == "logs":
+        denied = require_role(user, "Admin")
+        if denied:
+            return denied
+        if method != "GET":
+            raise ApiError(405, f"Không hỗ trợ {method} cho đường dẫn này")
+        return _logs(get_query(event))
+
+    if parts[0] != "transactions":
         raise ApiError(404, "Không tìm thấy đường dẫn")
     sub = parts[1] if len(parts) > 1 else None
 

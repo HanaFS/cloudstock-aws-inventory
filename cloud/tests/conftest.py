@@ -89,7 +89,9 @@ def call(aws):
         email = email or f"{role.lower()}@nhom4.com"
         ev = make_event(method, path, body, query, email=email, groups=role)
         resp = aws["apps"][app].lambda_handler(ev, None)
-        return resp["statusCode"], json.loads(resp["body"])
+        raw = json.loads(resp["body"])
+        payload = raw["data"] if isinstance(raw, dict) and raw.get("success") is True and "data" in raw else raw
+        return resp["statusCode"], payload
     return _call
 
 
