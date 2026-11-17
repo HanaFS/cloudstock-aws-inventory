@@ -32,44 +32,65 @@ def _dashboard():
         suppliers_count += resp["Count"]
     transactions = scan_all(transactions_table)
 
-    low_items = [p for p in products if int(p["stockQuantity"]) <= int(p["minThreshold"])]
-    low_items.sort(key=lambda p: (int(p["stockQuantity"]), p.get("name", "")))
+    low_items = [p for p in products if int(p.get("stockQuantity", p.get("quantity", 0))) <= int(p.get("minThreshold", 0))]
+    low_items.sort(key=lambda p: (int(p.get("stockQuantity", p.get("quantity", 0))), p.get("name", "")))
 
     by_cat = defaultdict(lambda: {"productCount": 0, "stockQuantity": 0, "stockValue": 0})
     for p in products:
         c = by_cat[p.get("category") or "Khác"]
         c["productCount"] += 1
-        c["stockQuantity"] += int(p["stockQuantity"])
-        c["stockValue"] += p["price"] * int(p["stockQuantity"])
+        qty = int(p.get("stockQuantity", p.get("quantity", 0)))
+        c["stockQuantity"] += qty
+        c["stockValue"] += p.get("price", 0) * qty
 
     today = datetime.now(VN_TZ).date()
     days = [today - timedelta(days=i) for i in range(6, -1, -1)]
     daily = {d: {"date": d.isoformat(), "import": 0, "export": 0} for d in days}
-    today_import = today_export = 0
+    today_import_count = today_export_count = 0
+    today_in_qty = today_out_qty = 0
+    today_transactions_count = 0
+
     for t in transactions:
         try:
-            d = _vn_date(t["createdAt"])
-        except (KeyError, ValueError):
+            d = _vn_date(t.get("createdAt") or t.get("timestamp"))
+        except (KeyError, ValueError, TypeError):
             continue
-        key = "import" if t.get("type") == "IMPORT" else "export"
-        if d in daily:
-            daily[d][key] += int(t["quantity"])
-        if d == today:
-            if key == "import":
-                today_import += 1
-            else:
-                today_export += 1
+        t_type = (t.get("type") or "").upper()
+        key = "import" if t_type in ("IMPORT", "IN") else "export"
+        qty = int(t.get("quantity") if "quantity" in t else t.get("amount", 0))
 
-    transactions.sort(key=lambda t: t.get("createdAt", ""), reverse=True)
+        if d in daily:
+            daily[d][key] += qty
+        if d == today:
+            today_transactions_count += 1
+            if key == "import":
+                today_import_count += 1
+                today_in_qty += qty
+            else:
+                today_export_count += 1
+                today_out_qty += qty
+
+    transactions.sort(key=lambda t: t.get("createdAt", "") or t.get("timestamp", ""), reverse=True)
     series = [daily[d] for d in days]
+    total_quantity = sum(int(p.get("stockQuantity", p.get("quantity", 0))) for p in products)
+    total_value = sum(p.get("price", 0) * int(p.get("stockQuantity", p.get("quantity", 0))) for p in products)
+
     return {
+        # 8 trường Frontend api.js mong đợi:
         "totalProducts": len(products),
-        "totalSuppliers": suppliers_count,
-        "totalStockValue": sum(p["price"] * int(p["stockQuantity"]) for p in products),
+        "totalQuantity": total_quantity,
+        "totalValue": total_value,
         "lowStockCount": len(low_items),
-        "outOfStockCount": sum(1 for p in products if int(p["stockQuantity"]) <= 0),
-        "todayImport": today_import,
-        "todayExport": today_export,
+        "totalSuppliers": suppliers_count,
+        "todayIn": today_in_qty,
+        "todayOut": today_out_qty,
+        "todayTransactions": today_transactions_count,
+
+        # Các trường bổ sung phục vụ biểu đồ và UI:
+        "totalStockValue": total_value,
+        "outOfStockCount": sum(1 for p in products if int(p.get("stockQuantity", p.get("quantity", 0))) <= 0),
+        "todayImport": today_import_count,
+        "todayExport": today_export_count,
         "lowStockItems": low_items,
         "recentTransactions": transactions[:RECENT_LIMIT],
         "chartData": {
@@ -87,7 +108,7 @@ def _route(method, path, user, event):
         return run_ping("api-dashboard-handler", user, lambda: {
             "products": products_table.scan(Limit=1)["Count"] >= 0,
             "transactions": transactions_table.scan(Limit=1)["Count"] >= 0})
-    if parts != ["dashboard"]:
+    if parts not in (["dashboard"], ["dashboard", "stats"]):
         raise ApiError(404, "Không tìm thấy đường dẫn")
     if method != "GET":
         raise ApiError(405, f"Không hỗ trợ {method} cho đường dẫn này")

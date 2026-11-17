@@ -322,6 +322,12 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /dashboard
             Method: GET
+        DashboardStats:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /dashboard/stats
+            Method: GET
 
   ProductsFunction:
     Type: AWS::Serverless::Function
@@ -366,6 +372,12 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /products/{proxy+}
             Method: ANY
+        UploadUrlRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /upload-url
+            Method: ANY
         SuppliersRoot:
           Type: HttpApi
           Properties:
@@ -390,6 +402,7 @@ Resources:
         LogGroup: !Ref TransactionsLogGroup
       Environment:
         Variables:
+          SNS_TOPIC_ARN: !Ref InventoryTopic
           LOG_GROUP_NAMES: !Join
             - ","
             - - !Ref UsersLogGroup
@@ -431,6 +444,10 @@ Resources:
                 - !GetAtt DashboardLogGroup.Arn
                 - !GetAtt ProductsLogGroup.Arn
                 - !GetAtt TransactionsLogGroup.Arn
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref InventoryTopic
       Events:
         TransactionsRoot:
           Type: HttpApi
@@ -444,10 +461,35 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /transactions/{proxy+}
             Method: ANY
+        LogsRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /logs
+            Method: GET
+        LogsProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /logs/{proxy+}
+            Method: ANY
 
   # ------------------------------------------------------------------
-  # 6. CloudWatch: canh bao + dashboard
+  # 6. CloudWatch & SNS: canh bao + dashboard
   # ------------------------------------------------------------------
+  InventoryTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "InventoryLowStockAlert${ResourceSuffix}"
+
+  InventoryTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref InventoryTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
   AlarmTopic:
     Type: AWS::SNS::Topic
     Properties:

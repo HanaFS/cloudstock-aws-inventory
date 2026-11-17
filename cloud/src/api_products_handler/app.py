@@ -29,6 +29,15 @@ def _status(stock):
 
 
 # ----------------------------------------------------------------- products
+def _normalize_prod(item):
+    if not item:
+        return item
+    qty = int(item.get("stockQuantity", item.get("quantity", 0)))
+    item["stockQuantity"] = qty
+    item["quantity"] = qty
+    return item
+
+
 def _list_products(query):
     items = scan_all(products_table)
     category = query.get("category")
@@ -44,29 +53,33 @@ def _list_products(query):
         items = [i for i in items
                  if text in str(i.get("name", "")).lower() or text in str(i.get("productId", "")).lower()]
     items.sort(key=lambda i: i.get("updatedAt", ""), reverse=True)
-    return build_response(200, items)
+    return build_response(200, [_normalize_prod(i) for i in items])
 
 
 def _get_product(product_id):
     item = products_table.get_item(Key={"productId": product_id}).get("Item")
     if not item:
         raise ApiError(404, f"Không tìm thấy sản phẩm {product_id}")
-    return build_response(200, item)
+    return build_response(200, _normalize_prod(item))
 
 
 def _create_product(body):
-    stock = to_int(body.get("stockQuantity", 0), "stockQuantity")
+    raw_stock = body.get("stockQuantity") if "stockQuantity" in body else body.get("quantity", 0)
+    stock = to_int(raw_stock, "quantity")
     item = {
-        "productId": new_id("PRD"),
+        "productId": clean_str(body.get("productId"), "productId", required=False) or new_id("PRD"),
         "name": clean_str(body.get("name"), "name"),
         "category": clean_str(body.get("category"), "category", max_len=100),
         "price": to_number(body.get("price"), "price"),
         "stockQuantity": stock,
+        "quantity": stock,
         "minThreshold": to_int(body.get("minThreshold", 0), "minThreshold"),
         "status": _status(stock),
         "imageUrl": clean_str(body.get("imageUrl"), "imageUrl", required=False, max_len=1000) or "",
         "updatedAt": get_iso_now(),
     }
+    if "supplierId" in body and body["supplierId"]:
+        item["supplierId"] = clean_str(body.get("supplierId"), "supplierId", max_len=64)
     products_table.put_item(Item=item, ConditionExpression="attribute_not_exists(productId)")
     return build_response(201, item)
 
@@ -89,9 +102,13 @@ def _update_product(product_id, body):
         add("minThreshold", to_int(body["minThreshold"], "minThreshold"))
     if "imageUrl" in body:
         add("imageUrl", clean_str(body["imageUrl"], "imageUrl", required=False, max_len=1000) or "")
-    if "stockQuantity" in body:
-        stock = to_int(body["stockQuantity"], "stockQuantity")
+    if "supplierId" in body:
+        add("supplierId", clean_str(body.get("supplierId"), "supplierId", required=False, max_len=64) or "")
+    if "stockQuantity" in body or "quantity" in body:
+        raw_stock = body.get("stockQuantity") if "stockQuantity" in body else body.get("quantity")
+        stock = to_int(raw_stock, "quantity")
         add("stockQuantity", stock)
+        add("quantity", stock)
         add("status", _status(stock))  # luôn tính lại status theo tồn kho mới
     if not sets:
         raise ApiError(400, "Không có trường nào để cập nhật")
@@ -110,7 +127,7 @@ def _update_product(product_id, body):
         if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
             raise ApiError(404, f"Không tìm thấy sản phẩm {product_id}")
         raise
-    return build_response(200, resp["Attributes"])
+    return build_response(200, _normalize_prod(resp["Attributes"]))
 
 
 def _delete_product(product_id):
@@ -233,6 +250,13 @@ def _route(method, path, user, event):
                 "put_object", Params={"Bucket": BUCKET_NAME, "Key": "products/_ping.txt"},
                 ExpiresIn=60).split("?")[0],
         })
+
+    if parts[0] in ("upload-url", "presigned-url"):
+        if method == "POST":
+            return _upload_url(body_fn())
+        if method == "GET":
+            return _upload_url(get_query(event))
+        raise ApiError(405, f"Không hỗ trợ {method} cho đường dẫn này")
 
     if parts[0] == "suppliers":
         return _supplier_crud(method, parts, body_fn, user)

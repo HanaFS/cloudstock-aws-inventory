@@ -45,16 +45,26 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 # 3. Response chuẩn kèm CORS
-def build_response(status_code, body_data):
+CORS_HEADERS = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,Idempotency-Key",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+}
+
+
+def build_response(status_code, data=None, message=None, is_error=False):
+    if is_error or status_code >= 400:
+        msg = message
+        if not msg and isinstance(data, dict):
+            msg = data.get("message") or data.get("error")
+        body = {"success": False, "message": msg or "Lỗi xử lý hệ thống"}
+    else:
+        body = {"success": True, "data": data}
     return {
         "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
-            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        },
-        "body": json.dumps(body_data, cls=DecimalEncoder, ensure_ascii=False),
+        "headers": CORS_HEADERS,
+        "body": json.dumps(body, cls=DecimalEncoder, ensure_ascii=False),
     }
 
 
