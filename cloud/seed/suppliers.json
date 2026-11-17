@@ -1,0 +1,6 @@
+[
+  {"supplierId":"SUP-001","name":"Công ty TNHH Phân Phối Công Nghệ Việt","phone":"0901234567","address":"268 Lý Thường Kiệt, Quận 10, TP. Hồ Chí Minh"},
+  {"supplierId":"SUP-002","name":"Công ty CP Thế Giới Số","phone":"0909123456","address":"123 Nguyễn Thị Minh Khai, Quận 1, TP. Hồ Chí Minh"},
+  {"supplierId":"SUP-003","name":"Công ty TNHH Linh Kiện Sài Gòn","phone":"0283822113","address":"45 Nguyễn Thái Học, Quận 1, TP. Hồ Chí Minh"},
+  {"supplierId":"SUP-004","name":"Công ty CP Máy Tính Miền Nam","phone":"0938765432","address":"12 Trần Hưng Đạo, Thành phố Thủ Đức, TP. Hồ Chí Minh"}
+]

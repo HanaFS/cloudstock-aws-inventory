@@ -1,0 +1,19 @@
+# AWS SAM
+.aws-sam/
+packaged.yaml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Bí mật - KHÔNG BAO GIỜ commit
+.env
+*.pem
+*.key
+credentials
+config.generated.js
+
+# File Word nội bộ (có thể chứa mật khẩu / thông số riêng)
+*.docx
