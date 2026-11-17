@@ -19,6 +19,15 @@
 
     <div id="login-error" class="login-error"></div>
 
+    <div id="hosted-login-section" class="hidden">
+      <p class="login-hint">
+        Đăng nhập bảo mật qua Amazon Cognito Hosted UI.
+      </p>
+      <button type="button" class="btn btn-primary btn-block" id="btn-hosted-login">
+        Đăng nhập với Cognito
+      </button>
+    </div>
+
     <form id="login-form" autocomplete="off">
       <div class="form-group">
         <label class="form-label" for="login-username">Tên đăng nhập</label>
@@ -49,9 +58,9 @@
       </button>
     </form>
 
-    <hr class="login-divider">
+    <hr class="login-divider" id="login-divider">
 
-    <div class="login-hint">
+    <div class="login-hint" id="login-hint">
       <p class="login-hint-title">Tài khoản demo &mdash; Mật khẩu: 1</p>
       <table class="login-hint-table">
         <thead>

@@ -1,0 +1,22 @@
+{
+  "resource": "/transactions",
+  "path": "/transactions",
+  "httpMethod": "POST",
+  "headers": {
+    "Idempotency-Key": "local-smoke-out-001",
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "requestContext": {
+    "authorizer": {
+      "claims": {
+        "cognito:groups": "Staff",
+        "cognito:username": "local.test",
+        "sub": "local-test-user"
+      }
+    }
+  },
+  "body": "{\"type\":\"OUT\",\"productId\":\"local-smoke-001\",\"amount\":3,\"supplierId\":null,\"reason\":\"Local smoke test issue\",\"invoiceUrl\":\"\"}",
+  "isBase64Encoded": false
+}

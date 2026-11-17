@@ -27,20 +27,56 @@ const AuthModule = (() => {
    
 
 
-  function initLoginPage() {
+  async function initLoginPage() {
     const form = document.getElementById("login-form");
     const errorBox = document.getElementById("login-error");
     const usernameInput = document.getElementById("login-username");
     const passwordInput = document.getElementById("login-password");
     const hintRows = document.querySelectorAll("#hint-accounts tr");
+    const hint = document.getElementById("login-hint");
+    const divider = document.getElementById("login-divider");
+    const hostedLogin = document.getElementById("hosted-login-section");
+    const hostedLoginButton = document.getElementById("btn-hosted-login");
 
-     
+    function showLoginError(message) {
+      if (!errorBox) return;
+      errorBox.textContent = message;
+      errorBox.classList.add("visible");
+    }
+
+    if (!CONFIG.USE_MOCK_AUTH) {
+      form?.classList.add("hidden");
+      hint?.classList.add("hidden");
+      divider?.classList.add("hidden");
+      hostedLogin?.classList.remove("hidden");
+
+      try {
+        const handledCallback = await ApiService.Auth.handleHostedUiCallback();
+        if (handledCallback || ApiService.Auth.isAuthenticated()) {
+          window.location.replace("index.html");
+          return;
+        }
+      } catch (err) {
+        showLoginError(err.message || "Đăng nhập Cognito thất bại.");
+      }
+
+      hostedLoginButton?.addEventListener("click", async () => {
+        hostedLoginButton.disabled = true;
+        try {
+          await ApiService.Auth.login();
+        } catch (err) {
+          showLoginError(err.message || "Không thể bắt đầu đăng nhập Cognito.");
+          hostedLoginButton.disabled = false;
+        }
+      });
+      return;
+    }
+
     if (ApiService.Auth.isAuthenticated()) {
       window.location.href = "index.html";
       return;
     }
 
-     
     hintRows.forEach((row) => {
       row.addEventListener("click", () => {
         const u = row.getAttribute("data-user");
@@ -68,14 +104,11 @@ const AuthModule = (() => {
         await ApiService.Auth.login(username, password);
         window.location.href = "index.html";
       } catch (err) {
-        if (errorBox) {
-          let msg = err.message || "Dang nhap that bai";
-          if (msg.includes("LOCKED") || msg.includes("khoa")) {
-            msg = "Tai khoan da bi khoa boi Quan tri vien";
-          }
-          errorBox.textContent = msg;
-          errorBox.classList.add("visible");
+        let msg = err.message || "Dang nhap that bai";
+        if (msg.includes("LOCKED") || msg.includes("khoa")) {
+          msg = "Tai khoan da bi khoa boi Quan tri vien";
         }
+        showLoginError(msg);
       }
     });
   }
@@ -125,8 +158,12 @@ const AuthModule = (() => {
     );
     logoutBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
-        ApiService.Auth.logout();
-        window.location.href = "login.html";
+        try {
+          const logoutUrl = ApiService.Auth.logout();
+          window.location.href = logoutUrl || "login.html";
+        } catch (err) {
+          showToast(err.message || "Không thể đăng xuất.", "error");
+        }
       });
     });
   }

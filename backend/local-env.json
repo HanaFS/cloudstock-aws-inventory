@@ -1,0 +1,20 @@
+{
+  "ProductsFunction": {
+    "DYNAMODB_ENDPOINT": "http://host.docker.internal:8000",
+    "PRODUCTS_TABLE": "cloudstock-dev-products",
+    "SUPPLIERS_TABLE": "cloudstock-dev-suppliers",
+    "TRANSACTIONS_TABLE": "cloudstock-dev-transactions"
+  },
+  "SuppliersFunction": {
+    "DYNAMODB_ENDPOINT": "http://host.docker.internal:8000",
+    "PRODUCTS_TABLE": "cloudstock-dev-products",
+    "SUPPLIERS_TABLE": "cloudstock-dev-suppliers",
+    "TRANSACTIONS_TABLE": "cloudstock-dev-transactions"
+  },
+  "TransactionsFunction": {
+    "DYNAMODB_ENDPOINT": "http://host.docker.internal:8000",
+    "PRODUCTS_TABLE": "cloudstock-dev-products",
+    "SUPPLIERS_TABLE": "cloudstock-dev-suppliers",
+    "TRANSACTIONS_TABLE": "cloudstock-dev-transactions"
+  }
+}
