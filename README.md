@@ -1,6 +1,6 @@
 # CloudStock
 
-Giao diện web quản lý kho viết bằng HTML, CSS và JavaScript thuần. Frontend mặc định nối các luồng hàng hóa, nhà cung cấp và giao dịch với backend local; người dùng và logs vẫn dùng dữ liệu giả lập trong `localStorage`. Backend chưa được deploy lên AWS.
+Giao diện web quản lý kho viết bằng HTML, CSS và JavaScript thuần. Frontend mặc định nối các luồng hàng hóa, nhà cung cấp và giao dịch với backend local; người dùng và logs vẫn dùng dữ liệu giả lập trong `localStorage`. Backend Python 3.12 chưa được deploy lên AWS.
 
 ## Chạy giao diện
 

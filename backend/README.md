@@ -17,17 +17,19 @@ Danh sách dùng DynamoDB `Scan` kèm cursor để tương thích bảng nhỏ b
 
 ## Yêu cầu
 
-- Node.js 22 trở lên
+- Python 3.12 trở lên
+- Các thư viện Python trong `requirements.txt` (`boto3`)
 - AWS SAM CLI để validate/build và chạy Lambda fixture qua `sam local`
 - Docker Desktop để chạy DynamoDB Local và Lambda container của SAM
 - AWS CLI credentials chỉ cần khi deploy lên AWS
 
-## Kiểm tra hiện có
+## Cài đặt và kiểm tra
 
 Từ thư mục `backend`:
 
 ```powershell
-npm test
+python -m pip install -r requirements.txt
+python -m unittest discover -s test -v
 ```
 
 ## Build và chạy API local
@@ -48,16 +50,16 @@ docker run --name cloudstock-dynamodb-local -p 8000:8000 -d amazon/dynamodb-loca
 Từ thư mục `backend`, tạo ba bảng local theo SAM template:
 
 ```powershell
-npm run db:local:init
+python -m scripts.init_local_dynamodb
 ```
 
 Để kết nối trình duyệt với các API đã triển khai, chạy local HTTP adapter tại thư mục `backend`:
 
 ```powershell
-npm run local:api
+python -m scripts.local_api
 ```
 
-Adapter gọi trực tiếp cùng các Lambda handler, kết nối DynamoDB Local qua `http://127.0.0.1:8000` và chỉ lắng nghe trên `127.0.0.1:3001` (có thể đổi bằng biến `PORT`). Nó chỉ nhận request từ origin `http://localhost:8080` và token local Admin/Staff. Đây là tiện ích phát triển local, không được deploy lên AWS. Health endpoint là `http://127.0.0.1:3001/health`.
+Adapter Python gọi trực tiếp cùng các Lambda handler, kết nối DynamoDB Local qua `http://127.0.0.1:8000` và chỉ lắng nghe trên `127.0.0.1:3001` (có thể đổi bằng biến `PORT`). Nó chỉ nhận request từ origin `http://localhost:8080` và token local Admin/Staff. Đây là tiện ích phát triển local, không được deploy lên AWS. Health endpoint là `http://127.0.0.1:3001/health`.
 
 Để chạy riêng các Lambda trong Docker bằng SAM, trước tiên build template. `local-env.json` trỏ Lambda container tới DynamoDB Local qua `host.docker.internal`; cấu hình này chỉ dành cho `sam local invoke`, không áp dụng khi chạy Lambda trên AWS:
 
@@ -109,7 +111,7 @@ Giao dịch vượt tồn dự kiến trả `statusCode: 409`; sản phẩm ph�
 
 ## Kết nối frontend với backend local
 
-Sau khi DynamoDB Local đã chạy và `npm run local:api` đang phục vụ tại cổng 3001, frontend được cấu hình sẵn trong `frontend/js/config.js` như sau:
+Sau khi DynamoDB Local đã chạy và `python -m scripts.local_api` đang phục vụ tại cổng 3001, frontend được cấu hình sẵn trong `frontend/js/config.js` như sau:
 
 ```js
 USE_MOCK_DATA: true,
