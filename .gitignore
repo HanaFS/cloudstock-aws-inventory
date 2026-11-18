@@ -42,4 +42,5 @@ build/
 # === AWS ===
 .aws-sam/
 samconfig.toml
+backend/test/events/*.local.json
 

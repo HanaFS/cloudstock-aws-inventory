@@ -67,48 +67,6 @@ Adapter Python gọi trực tiếp cùng các Lambda handler, kết nối Dynamo
 sam build --template-file .\template.yaml
 ```
 
-Để kiểm tra đọc bảng Products mà không tắt kiểm tra quyền trong handler, mở PowerShell thứ hai tại `backend` và gọi Lambda trực tiếp với event giả lập chỉ dành cho local:
-
-```powershell
-sam local invoke ProductsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\list-products.local.json
-```
-
-Event này chứa claims giả lập trong `test/events`, chỉ dùng cho kiểm thử local; không dùng làm token đăng nhập hay trong môi trường AWS.
-
-Để thử tạo một sản phẩm local rồi đọc lại:
-
-```powershell
-sam local invoke ProductsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\create-product.local.json
-sam local invoke ProductsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\list-products.local.json
-```
-
-Lệnh đầu tiên phải trả `statusCode: 201`; lệnh thứ hai trả `statusCode: 200` và có `local-smoke-001`. Event tạo dùng ID cố định nên chỉ chạy một lần; chạy lại sẽ trả xung đột vì sản phẩm đã tồn tại.
-
-Sau khi đã tạo sản phẩm đó, kiểm tra nhập kho và lịch sử giao dịch:
-
-```powershell
-sam local invoke TransactionsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\create-inbound-transaction.local.json
-sam local invoke TransactionsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\list-transactions.local.json
-```
-
-Giao dịch dùng `Idempotency-Key` cố định; chạy lại cùng event sẽ không ghi giao dịch trùng. Giao dịch nhập tăng số lượng sản phẩm lên 12 và xuất hiện trong lịch sử. Để xác nhận xuất kho giảm tồn:
-
-```powershell
-sam local invoke TransactionsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\create-outbound-transaction.local.json
-sam local invoke ProductsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\list-products.local.json
-```
-
-Sau giao dịch xuất 3 sản phẩm, `quantity` dự kiến là 9.
-
-Cuối cùng, thử xuất vượt tồn và đọc lại sản phẩm để xác nhận tồn không bị âm:
-
-```powershell
-sam local invoke TransactionsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\reject-insufficient-outbound.local.json
-sam local invoke ProductsFunction --template-file .aws-sam\build\template.yaml --env-vars .\local-env.json --event .\test\events\list-products.local.json
-```
-
-Giao dịch vượt tồn dự kiến trả `statusCode: 409`; sản phẩm phải còn `quantity: 9`.
-
 ## Kết nối frontend với backend local
 
 Sau khi DynamoDB Local đã chạy và `python -m scripts.local_api` đang phục vụ tại cổng 3001, frontend được cấu hình sẵn trong `frontend/js/config.js` như sau:
