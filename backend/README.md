@@ -87,7 +87,7 @@ Mở PowerShell riêng tại thư mục `frontend`, chạy:
 python -m http.server 8080
 ```
 
-Truy cập `http://localhost:8080` (không mở trang bằng `file:///`). Cơ sở dữ liệu local không tự nhận dữ liệu mock; hãy tạo nhà cung cấp/sản phẩm trong giao diện hoặc dùng các event fixture ở trên. Ảnh sản phẩm và chứng từ chưa hỗ trợ tải lên backend, nên bỏ tệp đính kèm khi thử tạo/cập nhật dữ liệu local.
+Truy cập `http://localhost:8080` (không mở trang bằng `file:///`). Cơ sở dữ liệu local không tự nhận dữ liệu mock; hãy tạo nhà cung cấp/sản phẩm trong giao diện. Ảnh sản phẩm và chứng từ chưa hỗ trợ tải lên backend, nên bỏ tệp đính kèm khi thử tạo/cập nhật dữ liệu local.
 
 ## Cognito Hosted UI
 
