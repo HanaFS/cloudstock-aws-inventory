@@ -4,7 +4,7 @@ const InventoryModule = (() => {
   let supplierList = [];
   let currentSubTab = "in";  
   let attachedInvoiceName = "";
-  let attachedInvoiceData = "";
+  let attachedInvoiceFile = null;
 
    
 
@@ -43,10 +43,10 @@ const InventoryModule = (() => {
     let outProdHtml = `<option value="">-- Chon san pham xuat --</option>`;
 
     productList.forEach((p) => {
-      const isLow = (p.quantity || 0) < (p.minThreshold || 0);
+      const isLow = (p.stockQuantity || 0) < (p.minThreshold || 0);
       const tag = isLow ? " [DUOI NGUONG]" : "";
-      inProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Ton hien tai: ${p.quantity})${tag}</option>`;
-      outProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Kha dung: ${p.quantity})${tag}</option>`;
+      inProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Ton hien tai: ${p.stockQuantity})${tag}</option>`;
+      outProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Kha dung: ${p.stockQuantity})${tag}</option>`;
     });
 
     if (inProdSelect) inProdSelect.innerHTML = inProdHtml;
@@ -117,7 +117,7 @@ const InventoryModule = (() => {
       return;
     }
 
-    if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.quantity);
+    if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.stockQuantity);
     if (minQtyEl) minQtyEl.textContent = formatNumber(prod.minThreshold);
     if (infoBox) infoBox.style.display = "flex";
 
@@ -132,10 +132,10 @@ const InventoryModule = (() => {
 
     const productId = document.getElementById("inv-in-product")?.value;
     const supplierId = document.getElementById("inv-in-supplier")?.value || null;
-    const amountVal = document.getElementById("inv-in-amount")?.value;
+    const quantityValue = document.getElementById("inv-in-quantity")?.value;
     const note = document.getElementById("inv-in-note")?.value.trim();
 
-    const amount = parseInt(amountVal, 10);
+    const quantity = parseInt(quantityValue, 10);
 
      
     if (!productId) {
@@ -143,7 +143,7 @@ const InventoryModule = (() => {
       return;
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(quantity) || quantity <= 0) {
       if (window.AuthModule) AuthModule.showToast("So luong nhap phai la so nguyen duong lon hon 0", "error");
       return;
     }
@@ -155,22 +155,23 @@ const InventoryModule = (() => {
     const performedBy = currentUser ? currentUser.fullName || currentUser.username : "Thủ kho";
 
      
-    const invoiceUrl = attachedInvoiceName
-      ? `s3://cloudstock-invoices-ap-southeast-1/invoices/${Date.now()}_${attachedInvoiceName}`
-      : "";
-
     const transaction = {
       transactionId: "txn-" + Date.now().toString(36),
-      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       performedBy,
-      type: "IN",
+      type: "IMPORT",
       productId,
       productName: prod.name,
-      amount,
+      quantity,
       supplierId,
       reason: note || "Nhap kho bo sung hang hoa",
-      invoiceUrl,
+      invoiceUrl: "",
     };
+    if (CONFIG.USE_LOCAL_API || !CONFIG.USE_MOCK_DATA) {
+      transaction.invoiceFile = attachedInvoiceFile;
+    } else if (attachedInvoiceName) {
+      transaction.invoiceUrl = `mock://invoices/${encodeURIComponent(attachedInvoiceName)}`;
+    }
 
     try {
        
@@ -185,12 +186,12 @@ const InventoryModule = (() => {
         timestamp: new Date().toISOString(),
         logStream: "lambda/inventoryService",
         level: "INFO",
-        message: `POST /transactions [IN] - Nhap kho thanh cong: +${amount} ${prod.name} (NCC: ${supName}) boi ${performedBy}${s3Log}`,
+        message: `POST /transactions [IMPORT] - Nhap kho thanh cong: +${quantity} ${prod.name} (NCC: ${supName}) boi ${performedBy}${s3Log}`,
       });
 
       if (window.AuthModule) {
         AuthModule.showToast(
-          `Nhap kho thanh cong: +${amount} ${prod.name}. Ton kho moi: ${prod.quantity + amount}`,
+          `Nhap kho thanh cong: +${quantity} ${prod.name}. Ton kho moi: ${prod.stockQuantity + quantity}`,
           "success"
         );
       }
@@ -199,7 +200,7 @@ const InventoryModule = (() => {
       document.getElementById("form-inbound")?.reset();
       document.getElementById("inv-in-prod-info").style.display = "none";
       attachedInvoiceName = "";
-      attachedInvoiceData = "";
+      attachedInvoiceFile = null;
       const dropzoneText = document.getElementById("inv-dropzone-text");
       if (dropzoneText) {
         dropzoneText.textContent = "Keo tha hoa don / chung tu (PDF, JPG, PNG) hoac bam de chon tep";
@@ -235,7 +236,7 @@ const InventoryModule = (() => {
       return;
     }
 
-    if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.quantity);
+    if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.stockQuantity);
     if (minQtyEl) minQtyEl.textContent = formatNumber(prod.minThreshold);
     if (infoBox) infoBox.style.display = "flex";
 
@@ -244,26 +245,26 @@ const InventoryModule = (() => {
 
   function validateStockOut() {
     const select = document.getElementById("inv-out-product");
-    const amountInput = document.getElementById("inv-out-amount");
+    const quantityInput = document.getElementById("inv-out-quantity");
     const warningBox = document.getElementById("inv-out-warning-box");
     const submitBtn = document.getElementById("btn-submit-outbound");
 
     const prodId = select?.value;
     const prod = productList.find((p) => p.productId === prodId);
-    const amount = parseInt(amountInput?.value, 10);
+    const quantity = parseInt(quantityInput?.value, 10);
 
-    if (!prod || isNaN(amount) || amount <= 0) {
+    if (!prod || isNaN(quantity) || quantity <= 0) {
       if (warningBox) warningBox.style.display = "none";
       if (submitBtn) submitBtn.disabled = false;
       return;
     }
 
-    const currentQty = prod.quantity || 0;
+    const currentQty = prod.stockQuantity || 0;
     const minThreshold = prod.minThreshold || 0;
-    const projectedQty = currentQty - amount;
+    const projectedQty = currentQty - quantity;
 
      
-    if (amount > currentQty) {
+    if (quantity > currentQty) {
        
       if (warningBox) {
         warningBox.style.display = "block";
@@ -271,7 +272,7 @@ const InventoryModule = (() => {
         warningBox.style.background = "var(--danger-light)";
         warningBox.style.borderColor = "#fecaca";
         warningBox.style.color = "var(--danger)";
-        warningBox.textContent = `KHONG THE XUAT KHO! So luong xuat (${amount}) lon hon so luong ton kho hien tai (${currentQty}). Vui long kiem tra lai.`;
+        warningBox.textContent = `KHONG THE XUAT KHO! So luong xuat (${quantity}) lon hon so luong ton kho hien tai (${currentQty}). Vui long kiem tra lai.`;
       }
       if (submitBtn) submitBtn.disabled = true;
     } else if (projectedQty < minThreshold) {
@@ -295,18 +296,18 @@ const InventoryModule = (() => {
     e.preventDefault();
 
     const productId = document.getElementById("inv-out-product")?.value;
-    const amountVal = document.getElementById("inv-out-amount")?.value;
+    const quantityValue = document.getElementById("inv-out-quantity")?.value;
     const reasonSelect = document.getElementById("inv-out-reason-type")?.value;
     const note = document.getElementById("inv-out-note")?.value.trim();
 
-    const amount = parseInt(amountVal, 10);
+    const quantity = parseInt(quantityValue, 10);
 
     if (!productId) {
       if (window.AuthModule) AuthModule.showToast("Vui long chon san pham can xuat kho", "warning");
       return;
     }
 
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(quantity) || quantity <= 0) {
       if (window.AuthModule) AuthModule.showToast("So luong xuat phai la so nguyen duong lon hon 0", "error");
       return;
     }
@@ -315,10 +316,10 @@ const InventoryModule = (() => {
     if (!prod) return;
 
      
-    if (amount > prod.quantity) {
+    if (quantity > prod.stockQuantity) {
       if (window.AuthModule) {
         AuthModule.showToast(
-          `Loi chan xuat: So luong xuat (${amount}) vuot qua ton hien tai (${prod.quantity})`,
+          `Loi chan xuat: So luong xuat (${quantity}) vuot qua ton hien tai (${prod.stockQuantity})`,
           "error"
         );
       }
@@ -333,12 +334,12 @@ const InventoryModule = (() => {
 
     const transaction = {
       transactionId: "txn-" + Date.now().toString(36),
-      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       performedBy,
-      type: "OUT",
+      type: "EXPORT",
       productId,
       productName: prod.name,
-      amount,
+      quantity,
       supplierId: null,
       reason: fullReason,
       invoiceUrl: "",
@@ -348,7 +349,7 @@ const InventoryModule = (() => {
        
       await ApiService.Transactions.create(transaction);
 
-      const remainingQty = prod.quantity - amount;
+      const remainingQty = prod.stockQuantity - quantity;
 
        
       if (remainingQty < prod.minThreshold) {
@@ -370,7 +371,7 @@ const InventoryModule = (() => {
       } else {
         if (window.AuthModule) {
           AuthModule.showToast(
-            `Xuat kho thanh cong: -${amount} ${prod.name}. Ton con lai: ${remainingQty}`,
+            `Xuat kho thanh cong: -${quantity} ${prod.name}. Ton con lai: ${remainingQty}`,
             "success"
           );
         }
@@ -381,7 +382,7 @@ const InventoryModule = (() => {
         timestamp: new Date().toISOString(),
         logStream: "lambda/inventoryService",
         level: "INFO",
-        message: `POST /transactions [OUT] - Xuat kho thanh cong: -${amount} ${prod.name} (Ly do: ${fullReason}) boi ${performedBy}`,
+        message: `POST /transactions [EXPORT] - Xuat kho thanh cong: -${quantity} ${prod.name} (Ly do: ${fullReason}) boi ${performedBy}`,
       });
 
        
@@ -422,10 +423,10 @@ const InventoryModule = (() => {
 
       tbody.innerHTML = recent
         .map((t) => {
-          const isIN = t.type === "IN";
-          const typeBadge = isIN
-            ? `<span class="badge badge-in">NHAP (+${formatNumber(t.amount)})</span>`
-            : `<span class="badge badge-out">XUAT (-${formatNumber(t.amount)})</span>`;
+          const isImport = t.type === "IMPORT";
+          const typeBadge = isImport
+            ? `<span class="badge badge-in">NHAP (+${formatNumber(t.quantity)})</span>`
+            : `<span class="badge badge-out">XUAT (-${formatNumber(t.quantity)})</span>`;
 
           const invoiceIndicator = t.invoiceUrl
             ? `<span class="badge badge-info" title="${t.invoiceUrl}">Co chung tu S3</span>`
@@ -433,7 +434,7 @@ const InventoryModule = (() => {
 
           return `
             <tr>
-              <td class="col-mono text-xs">${formatDateTime(t.timestamp)}</td>
+              <td class="col-mono text-xs">${formatDateTime(t.createdAt)}</td>
               <td class="col-mono"><strong>${t.transactionId}</strong></td>
               <td>${typeBadge}</td>
               <td class="col-mono"><strong>${t.productId}</strong></td>
@@ -487,8 +488,8 @@ const InventoryModule = (() => {
 
     function processInvoiceFile(file) {
        
-      const validTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-      const isPdfOrImg = validTypes.includes(file.type) || file.name.match(/\.(pdf|jpe?g|png|webp)$/i);
+      const validTypes = ["application/pdf", "image/jpeg", "image/png"];
+      const isPdfOrImg = validTypes.includes(file.type);
 
       if (!isPdfOrImg) {
         if (window.AuthModule) {
@@ -496,19 +497,21 @@ const InventoryModule = (() => {
         }
         return;
       }
+      if (file.size < 1 || file.size > 15 * 1024 * 1024) {
+        if (window.AuthModule) {
+          AuthModule.showToast("Chứng từ phải có dung lượng tối đa 15 MB", "warning");
+        }
+        return;
+      }
 
       attachedInvoiceName = file.name;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        attachedInvoiceData = evt.target.result;
-        if (dropzoneText) {
-          dropzoneText.textContent = `Da chon tep: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - San sang day len S3`;
-        }
-        if (window.AuthModule) {
-          AuthModule.showToast(`Da nap chung tu ${file.name} vao phieu nhap (S3)`, "info");
-        }
-      };
-      reader.readAsDataURL(file);
+      attachedInvoiceFile = file;
+      if (dropzoneText) {
+        dropzoneText.textContent = `Da chon tep: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - San sang day len S3`;
+      }
+      if (window.AuthModule) {
+        AuthModule.showToast(`Da nap chung tu ${file.name} vao phieu nhap (S3)`, "info");
+      }
     }
   }
 
@@ -549,8 +552,8 @@ const InventoryModule = (() => {
     const outProd = document.getElementById("inv-out-product");
     if (outProd) outProd.addEventListener("change", handleOutProductChange);
 
-    const outAmount = document.getElementById("inv-out-amount");
-    if (outAmount) outAmount.addEventListener("input", validateStockOut);
+    const outQuantity = document.getElementById("inv-out-quantity");
+    if (outQuantity) outQuantity.addEventListener("input", validateStockOut);
 
     const formOut = document.getElementById("form-outbound");
     if (formOut) formOut.addEventListener("submit", handleOutboundSubmit);

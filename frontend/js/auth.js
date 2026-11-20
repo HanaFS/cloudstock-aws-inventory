@@ -105,7 +105,7 @@ const AuthModule = (() => {
         window.location.href = "index.html";
       } catch (err) {
         let msg = err.message || "Dang nhap that bai";
-        if (msg.includes("LOCKED") || msg.includes("khoa")) {
+        if (msg.includes("DISABLED") || msg.includes("khoa")) {
           msg = "Tai khoan da bi khoa boi Quan tri vien";
         }
         showLoginError(msg);
@@ -238,17 +238,17 @@ const AuthModule = (() => {
     const elTotal = document.getElementById("stat-user-total");
     const elAdmin = document.getElementById("stat-user-admin");
     const elStaff = document.getElementById("stat-user-staff");
-    const elLocked = document.getElementById("stat-user-locked");
+    const elDisabled = document.getElementById("stat-user-disabled");
 
     const total = allUsers.length;
     const adminCount = allUsers.filter((u) => u.role === "Admin").length;
     const staffCount = allUsers.filter((u) => u.role === "Staff").length;
-    const lockedCount = allUsers.filter((u) => u.status === "LOCKED").length;
+    const disabledCount = allUsers.filter((u) => u.status === "DISABLED").length;
 
     if (elTotal) elTotal.textContent = total;
     if (elAdmin) elAdmin.textContent = adminCount;
     if (elStaff) elStaff.textContent = staffCount;
-    if (elLocked) elLocked.textContent = lockedCount;
+    if (elDisabled) elDisabled.textContent = disabledCount;
   }
 
   function getFilteredUsers() {
@@ -301,7 +301,7 @@ const AuthModule = (() => {
         const statusBadge =
           u.status === "ACTIVE"
             ? `<span class="badge badge-active">ACTIVE</span>`
-            : `<span class="badge badge-locked">LOCKED</span>`;
+            : `<span class="badge badge-locked">DISABLED</span>`;
         const roleBadge =
           u.role === "Admin"
             ? `<span class="badge badge-admin">Admin</span>`
@@ -384,9 +384,9 @@ const AuthModule = (() => {
     try {
       const res = await ApiService.Users.getById(userId);
       const user = res.data;
-      const newStatus = user.status === "ACTIVE" ? "LOCKED" : "ACTIVE";
+      const newStatus = user.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
       await ApiService.Users.update(userId, { status: newStatus });
-      const actionText = newStatus === "LOCKED" ? "khoa" : "mo khoa";
+      const actionText = newStatus === "DISABLED" ? "khoa" : "mo khoa";
       showToast(`Da ${actionText} tai khoan ${user.username}`, "success");
       loadUserList();
     } catch (err) {

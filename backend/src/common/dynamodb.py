@@ -3,8 +3,6 @@ import json
 import os
 
 import boto3
-from boto3.dynamodb.conditions import Attr
-
 from .http import ApiError
 
 
@@ -29,6 +27,13 @@ def create_dynamodb_resource(env=None):
 
 dynamodb = create_dynamodb_resource()
 MAX_PAGE_SIZE = 100
+
+
+def table_name(env_name):
+    name = os.environ.get(env_name)
+    if not name:
+        raise RuntimeError(f"{env_name} environment variable is required.")
+    return name
 
 
 def parse_limit(event):
@@ -80,9 +85,14 @@ def scan_page(table, event, key_name, filter_expression=None):
 
 def query_page(table, event, **query):
     query["Limit"] = parse_limit(event)
+    key_names = (
+        ["transactionId", "createdAt", "gsi1pk", "gsi1sk"]
+        if query.get("IndexName") == "ByCreatedAt"
+        else ["transactionId", "gsi1pk", "gsi1sk"]
+    )
     cursor = decode_cursor(
         (event.get("queryStringParameters") or {}).get("nextToken"),
-        ["transactionId", "gsi1pk", "gsi1sk"],
+        key_names,
     )
     if cursor:
         query["ExclusiveStartKey"] = cursor

@@ -37,12 +37,16 @@ def initialize_tables(env=None):
             "BillingMode": "PAY_PER_REQUEST",
             "AttributeDefinitions": [
                 {"AttributeName": "transactionId", "AttributeType": "S"},
+                {"AttributeName": "createdAt", "AttributeType": "S"},
                 {"AttributeName": "gsi1pk", "AttributeType": "S"},
                 {"AttributeName": "gsi1sk", "AttributeType": "S"},
             ],
-            "KeySchema": [{"AttributeName": "transactionId", "KeyType": "HASH"}],
+            "KeySchema": [
+                {"AttributeName": "transactionId", "KeyType": "HASH"},
+                {"AttributeName": "createdAt", "KeyType": "RANGE"},
+            ],
             "GlobalSecondaryIndexes": [{
-                "IndexName": "ByTimestamp",
+                "IndexName": "ByCreatedAt",
                 "KeySchema": [
                     {"AttributeName": "gsi1pk", "KeyType": "HASH"},
                     {"AttributeName": "gsi1sk", "KeyType": "RANGE"},

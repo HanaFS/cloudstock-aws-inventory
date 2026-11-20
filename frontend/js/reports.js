@@ -43,7 +43,7 @@ const ReportsModule = (() => {
           ...t,
           supplierName: t.supplierId ? supMap[t.supplierId] || t.supplierId : "",
         }))
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
       populatePerformerFilter();
       renderTransactionsTable();
@@ -115,18 +115,18 @@ const ReportsModule = (() => {
 
     tbody.innerHTML = filtered
       .map((t) => {
-        const isIN = t.type === "IN";
-        const typeBadge = isIN
+        const isImport = t.type === "IMPORT";
+        const typeBadge = isImport
           ? `<span class="badge badge-in">NHAP KHO</span>`
           : `<span class="badge badge-out">XUAT KHO</span>`;
 
-        const amountFormatted = isIN
-          ? `<span class="text-success font-semibold">+${formatNumber(t.amount)}</span>`
-          : `<span class="text-danger font-semibold">-${formatNumber(t.amount)}</span>`;
+        const quantityFormatted = isImport
+          ? `<span class="text-success font-semibold">+${formatNumber(t.quantity)}</span>`
+          : `<span class="text-danger font-semibold">-${formatNumber(t.quantity)}</span>`;
 
         let reasonOrSupplier = t.reason || "-";
-        if (isIN && t.supplierName) {
-          reasonOrSupplier = `NCC: ${t.supplierName}${t.reason ? `(${t.reason})` : ""}`;
+        if (isImport && t.supplierName) {
+          reasonOrSupplier = `NCC: ${t.supplierName}`;
         }
 
         const invoiceLink = t.invoiceUrl
@@ -136,12 +136,12 @@ const ReportsModule = (() => {
         return `
           <tr>
             <td class="col-mono"><strong>${t.transactionId}</strong></td>
-            <td class="col-mono text-xs">${formatDateTime(t.timestamp)}</td>
+            <td class="col-mono text-xs">${formatDateTime(t.createdAt)}</td>
             <td><span class="text-muted">${t.performedBy || "-"}</span></td>
             <td>${typeBadge}</td>
             <td class="col-mono"><strong>${t.productId}</strong></td>
             <td><strong>${t.productName}</strong></td>
-            <td class="col-r">${amountFormatted}</td>
+            <td class="col-r">${quantityFormatted}</td>
             <td class="cell-wrap-text">${reasonOrSupplier}</td>
             <td class="col-c">${invoiceLink}</td>
           </tr>
@@ -150,15 +150,28 @@ const ReportsModule = (() => {
       .join("");
   }
 
-  function viewInvoice(transactionId) {
+  async function viewInvoice(transactionId) {
     const t = transactionList.find((item) => item.transactionId === transactionId);
     if (!t || !t.invoiceUrl) return;
 
-    if (window.AuthModule) {
-      AuthModule.showToast(
-        `Pre-signed URL S3: ${t.invoiceUrl} (Giao dich: ${t.transactionId})`,
-        "info"
-      );
+    const popup = window.open("about:blank", "_blank");
+    try {
+      const response = await ApiService.Transactions.getInvoiceUrl(transactionId);
+      const url = response?.data?.url;
+      if (typeof url !== "string" || !url.startsWith("https://")) {
+        throw new Error("Backend không trả về liên kết chứng từ an toàn.");
+      }
+      if (popup) {
+        popup.opener = null;
+        popup.location.assign(url);
+      } else if (window.AuthModule) {
+        AuthModule.showToast("Trình duyệt đã chặn cửa sổ mở chứng từ.", "warning");
+      }
+    } catch (err) {
+      if (popup) popup.close();
+      if (window.AuthModule) {
+        AuthModule.showToast(`Không thể mở chứng từ: ${err.message}`, "error");
+      }
     }
   }
 
@@ -177,12 +190,12 @@ const ReportsModule = (() => {
     const rows = filtered.map((t, idx) => ({
       STT: idx + 1,
       "Ma Giao Dich": t.transactionId,
-      "Ngay Gio": formatDateTimeFull(t.timestamp),
+      "Ngay Gio": formatDateTimeFull(t.createdAt),
       "Nguoi Thuc Hien": t.performedBy || "",
-      "Loai Thao Tac": t.type === "IN" ? "Nhap kho" : "Xuat kho",
+      "Loai Thao Tac": t.type === "IMPORT" ? "Nhap kho" : "Xuat kho",
       "Ma San Pham": t.productId,
       "Ten San Pham": t.productName,
-      "So Luong": t.amount,
+      "So Luong": t.quantity,
       "Ly Do / Nha Cung Cap": t.supplierName ? `NCC: ${t.supplierName} (${t.reason || ""})` : t.reason || "",
       "Chung Tu S3": t.invoiceUrl || "Khong co",
     }));
@@ -231,11 +244,11 @@ const ReportsModule = (() => {
     const nowStr = `${now.toLocaleDateString("vi-VN")} ${now.toLocaleTimeString("vi-VN")}`;
 
     const totalIn = filtered
-      .filter((t) => t.type === "IN")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "IMPORT")
+      .reduce((sum, t) => sum + (t.quantity || 0), 0);
     const totalOut = filtered
-      .filter((t) => t.type === "OUT")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "EXPORT")
+      .reduce((sum, t) => sum + (t.quantity || 0), 0);
 
     const printContainer = document.createElement("div");
     printContainer.className = "pdf-report-container";
@@ -258,11 +271,11 @@ const ReportsModule = (() => {
           <div class="pdf-summary-value">${filtered.length}</div>
         </div>
         <div class="pdf-summary-card pdf-summary-in">
-          <div class="pdf-summary-label pdf-summary-label-in">Tong nhap (IN)</div>
+          <div class="pdf-summary-label pdf-summary-label-in">Tong nhap (IMPORT)</div>
           <div class="pdf-summary-value pdf-summary-value-in">+${formatNumber(totalIn)}</div>
         </div>
         <div class="pdf-summary-card pdf-summary-out">
-          <div class="pdf-summary-label pdf-summary-label-out">Tong xuat (OUT)</div>
+          <div class="pdf-summary-label pdf-summary-label-out">Tong xuat (EXPORT)</div>
           <div class="pdf-summary-value pdf-summary-value-out">-${formatNumber(totalOut)}</div>
         </div>
       </div>
@@ -287,15 +300,15 @@ const ReportsModule = (() => {
               (t) => `
             <tr class="pdf-tr">
               <td class="pdf-td col-mono"><strong>${t.transactionId}</strong></td>
-              <td class="pdf-td col-mono">${formatDateTime(t.timestamp)}</td>
+              <td class="pdf-td col-mono">${formatDateTime(t.createdAt)}</td>
               <td class="pdf-td">${t.performedBy || "-"}</td>
-              <td class="pdf-td-c font-semibold ${t.type === "IN" ? "text-success" : "text-danger"}">
-                ${t.type === "IN" ? "NHAP" : "XUAT"}
+              <td class="pdf-td-c font-semibold ${t.type === "IMPORT" ? "text-success" : "text-danger"}">
+                ${t.type === "IMPORT" ? "NHAP" : "XUAT"}
               </td>
               <td class="pdf-td col-mono">${t.productId}</td>
               <td class="pdf-td">${t.productName}</td>
               <td class="pdf-td-r font-semibold">
-                ${t.type === "IN" ? "+" : "-"}${formatNumber(t.amount)}
+                ${t.type === "IMPORT" ? "+" : "-"}${formatNumber(t.quantity)}
               </td>
               <td class="pdf-td text-secondary">${t.supplierName ? `NCC: ${t.supplierName}` : t.reason || "-"}</td>
             </tr>
