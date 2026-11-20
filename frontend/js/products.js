@@ -24,9 +24,9 @@ const ProductsModule = (() => {
       renderSupplierOptionsInForm();
       renderProductTable();
     } catch (err) {
-      console.error("Loi tai danh sach san pham:", err);
+      console.error("Lỗi tải danh sách sản phẩm:", err);
       if (window.AuthModule) {
-        AuthModule.showToast("Loi tai hang hoa: " + err.message, "error");
+        AuthModule.showToast("Lỗi tải hàng hoá: " + err.message, "error");
       }
     }
   }
@@ -64,7 +64,7 @@ const ProductsModule = (() => {
     const filtered = getFilteredProducts();
 
     if (countBadge) {
-      countBadge.textContent = `${filtered.length} san pham`;
+      countBadge.textContent = `${filtered.length} sản phẩm`;
     }
 
     const totalPages = Math.ceil(filtered.length / pageSize) || 1;
@@ -76,7 +76,7 @@ const ProductsModule = (() => {
       tbody.innerHTML = `
         <tr>
           <td colspan="8" class="col-c text-muted cell-padded-lg">
-            Khong tim thay san pham nao phu hop voi bo loc.
+            Không tìm thấy sản phẩm nào phù hợp với bộ lọc.
           </td>
         </tr>
       `;
@@ -93,9 +93,9 @@ const ProductsModule = (() => {
       .map((p) => {
         const isLow = (p.quantity || 0) < (p.minThreshold || 0);
         const stockBadge = isLow
-          ? `<span class="badge badge-danger">DUOI NGUONG</span>`
-          : `<span class="badge badge-success">AN TOAN</span>`;
-        const supName = supMap[p.supplierId] || "Chua gan NCC";
+          ? `<span class="badge badge-danger">DƯỚI NGƯỠNG</span>`
+          : `<span class="badge badge-success">AN TOÀN</span>`;
+        const supName = supMap[p.supplierId] || "Chưa gắn NCC";
 
         return `
           <tr>
@@ -117,14 +117,14 @@ const ProductsModule = (() => {
                 class="btn btn-secondary btn-sm"
                 onclick="ProductsModule.openEditModal('${p.productId}')"
               >
-                Sua
+                Sửa
               </button>
               <button
                 type="button"
                 class="btn btn-danger btn-sm"
                 onclick="ProductsModule.confirmDelete('${p.productId}')"
               >
-                Xoa
+                Xóa
               </button>
             </td>
           </tr>
@@ -139,20 +139,20 @@ const ProductsModule = (() => {
     if (!el) return;
     if (totalPages <= 1) {
       el.innerHTML = `
-        <div class="pagination-info">Hien thi ${totalItems} ket qua</div>
+        <div class="pagination-info">Hiển thị ${totalItems} kết quả</div>
       `;
       return;
     }
 
     let btns = `
-      <div class="pagination-info">Trang ${currentPage} / ${totalPages} (${totalItems} ket qua)</div>
+      <div class="pagination-info">Trang ${currentPage} / ${totalPages} (${totalItems} kết quả)</div>
       <button
         type="button"
         class="page-btn"
         ${currentPage === 1 ? "disabled" : ""}
         onclick="ProductsModule.changePage(${currentPage - 1})"
       >
-        Truoc
+        Trước
       </button>
     `;
 
@@ -175,8 +175,7 @@ const ProductsModule = (() => {
         ${currentPage === totalPages ? "disabled" : ""}
         onclick="ProductsModule.changePage(${currentPage + 1})"
       >
-        Sau
-      </button>
+        Sau</button>
     `;
 
     el.innerHTML = btns;
@@ -195,7 +194,7 @@ const ProductsModule = (() => {
       new Set(productList.map((p) => p.category).filter(Boolean))
     );
 
-    let html = `<option value="ALL">Tat ca danh muc</option>`;
+    let html = `<option value="ALL">Tất cả danh mục</option>`;
     categories.forEach((cat) => {
       html += `<option value="${cat}">${cat}</option>`;
     });
@@ -206,7 +205,7 @@ const ProductsModule = (() => {
     const select = document.getElementById("prod-form-supplier");
     if (!select) return;
 
-    let html = `<option value="">-- Chon nha cung cap --</option>`;
+    let html = `<option value="">-- Chọn nhà cung cấp --</option>`;
     supplierList.forEach((s) => {
       html += `<option value="${s.supplierId}">${s.name} (${s.supplierId})</option>`;
     });
@@ -222,8 +221,8 @@ const ProductsModule = (() => {
     const dropzoneText = document.getElementById("prod-dropzone-text");
 
     if (form) form.reset();
-    if (title) title.textContent = "Them Hang hoa Moi";
-    if (dropzoneText) dropzoneText.textContent = "Keo tha tep vao day hoac bam de chon anh minh hoa (Mo phong S3 Upload)";
+    if (title) title.textContent = "Thêm hàng hoá mới";
+    if (dropzoneText) dropzoneText.textContent = "Kéo thả tệp vào đây. Hoặc bấm để chọn ảnh (S3 Upload)";
 
     const idInput = document.getElementById("prod-form-id");
     if (idInput) {
@@ -252,7 +251,7 @@ const ProductsModule = (() => {
     const supSelect = document.getElementById("prod-form-supplier");
     const dropzoneText = document.getElementById("prod-dropzone-text");
 
-    if (title) title.textContent = `Chinh sua: ${prod.productId}`;
+    if (title) title.textContent = `Chỉnh sửa: ${prod.productId}`;
     if (idInput) {
       idInput.value = prod.productId;
       idInput.readOnly = true; // Không sửa mã khi edit
@@ -265,8 +264,8 @@ const ProductsModule = (() => {
     if (supSelect) supSelect.value = prod.supplierId || "";
     if (dropzoneText) {
       dropzoneText.textContent = prod.imageUrl
-        ? "Da co anh tai len tren S3. Keo anh moi neu muon thay the."
-        : "Keo tha tep vao day hoac bam de chon anh (S3 Upload)";
+        ? "Đã có ảnh tải lên trên S3. Chọn ảnh mới nếu muốn thay thế."
+        : "Kéo thả tệp vào đây hoặc bấm để chọn ảnh (S3 Upload)";
     }
 
     const modal = document.getElementById("modal-product");
@@ -293,7 +292,7 @@ const ProductsModule = (() => {
 
     if (!productId || !name || !category) {
       if (window.AuthModule) {
-        AuthModule.showToast("Vui long nhap day du thong tin bat buoc", "warning");
+        AuthModule.showToast("Vui lòng nhập đầy đủ thông tin bắt buộc", "warning");
       }
       return;
     }
@@ -306,7 +305,7 @@ const ProductsModule = (() => {
       quantity,
       minThreshold,
       supplierId,
-      imageUrl: uploadedImageBase64,
+      imageKey: uploadedImageBase64 ? `img-${Date.now()}.jpg` : null,
       updatedAt: new Date().toISOString(),
     };
 
@@ -315,20 +314,20 @@ const ProductsModule = (() => {
         // Cập nhật
         await ApiService.Products.update(editingProductId, payload);
         if (window.AuthModule) {
-          AuthModule.showToast(`Da cap nhat hang hoa: ${name}`, "success");
+          AuthModule.showToast(`Đã cập nhật hàng hoá: ${name}`, "success");
         }
       } else {
         // Kiểm tra trùng mã
         const existing = productList.find((p) => p.productId === productId);
         if (existing) {
           if (window.AuthModule) {
-            AuthModule.showToast(`Ma san pham ${productId} da ton tai`, "error");
+            AuthModule.showToast(`Mã sản phẩm ${productId} đã tồn tại`, "error");
           }
           return;
         }
         await ApiService.Products.create(payload);
         if (window.AuthModule) {
-          AuthModule.showToast(`Them moi thanh cong: ${name}`, "success");
+          AuthModule.showToast(`Thêm mới thành công: ${name}`, "success");
         }
       }
 
@@ -340,7 +339,7 @@ const ProductsModule = (() => {
       }
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi: ${err.message}`, "error");
       }
     }
   }
@@ -352,7 +351,7 @@ const ProductsModule = (() => {
     deletingProductId = productId;
     const msgEl = document.getElementById("confirm-delete-msg");
     if (msgEl) {
-      msgEl.textContent = `Ban co chac chan muon xoa hang hoa "${prod.name}" (Ma: ${prod.productId})? Thao tac nay se cap nhat truc tiep vao DynamoDB va khong the hoan tac.`;
+      msgEl.textContent = `Bạn có chắc chắn muốn xóa hàng hoá "${prod.name}" (Mã: ${prod.productId})? Thao tác này sẽ cập nhật trực tiếp vào DynamoDB và không thể hoàn tác.`;
     }
 
     const modal = document.getElementById("modal-confirm-delete-product");
@@ -371,7 +370,7 @@ const ProductsModule = (() => {
     try {
       await ApiService.Products.delete(deletingProductId);
       if (window.AuthModule) {
-        AuthModule.showToast("Da xoa hang hoa thanh cong", "success");
+        AuthModule.showToast("Đã xóa hàng hoá thành công", "success");
       }
       closeDeleteModal();
       await loadProducts();
@@ -381,7 +380,7 @@ const ProductsModule = (() => {
       }
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi xoa hang hoa: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi xóa hàng hoá: ${err.message}`, "error");
       }
     }
   }
@@ -421,7 +420,7 @@ const ProductsModule = (() => {
     function handleFileSelect(file) {
       if (!file.type.startsWith("image/")) {
         if (window.AuthModule) {
-          AuthModule.showToast("Vui long chi chon tep hinh anh", "warning");
+          AuthModule.showToast("Vui lòng chỉ chọn tệp hình ảnh", "warning");
         }
         return;
       }
@@ -430,10 +429,10 @@ const ProductsModule = (() => {
       reader.onload = (evt) => {
         uploadedImageBase64 = evt.target.result;
         if (dropzoneText) {
-          dropzoneText.textContent = `Da chon tep: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - San sang day len S3`;
+          dropzoneText.textContent = `Đã chọn tệp: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - sẵn sàng đẩy lên S3`;
         }
         if (window.AuthModule) {
-          AuthModule.showToast(`Da nap anh ${file.name} vao phieu`, "info");
+          AuthModule.showToast(`Đã nạp ảnh ${file.name} vào phiếu`, "info");
         }
       };
       reader.readAsDataURL(file);

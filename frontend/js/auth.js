@@ -33,10 +33,7 @@ const AuthModule = (() => {
     const usernameInput = document.getElementById("login-username");
     const passwordInput = document.getElementById("login-password");
     const hintRows = document.querySelectorAll("#hint-accounts tr");
-    const hint = document.getElementById("login-hint");
-    const divider = document.getElementById("login-divider");
-    const hostedLogin = document.getElementById("hosted-login-section");
-    const hostedLoginButton = document.getElementById("btn-hosted-login");
+    const btnLogin = document.getElementById("btn-login");
 
     function showLoginError(message) {
       if (!errorBox) return;
@@ -44,36 +41,18 @@ const AuthModule = (() => {
       errorBox.classList.add("visible");
     }
 
-    if (!CONFIG.USE_MOCK_AUTH) {
-      form?.classList.add("hidden");
-      hint?.classList.add("hidden");
-      divider?.classList.add("hidden");
-      hostedLogin?.classList.remove("hidden");
-
-      try {
-        const handledCallback = await ApiService.Auth.handleHostedUiCallback();
-        if (handledCallback || ApiService.Auth.isAuthenticated()) {
-          window.location.replace("index.html");
-          return;
-        }
-      } catch (err) {
-        showLoginError(err.message || "Đăng nhập Cognito thất bại.");
+    try {
+      const handledCallback = await ApiService.Auth.handleHostedUiCallback();
+      if (handledCallback || ApiService.Auth.isAuthenticated()) {
+        window.location.replace("index.html");
+        return;
       }
-
-      hostedLoginButton?.addEventListener("click", async () => {
-        hostedLoginButton.disabled = true;
-        try {
-          await ApiService.Auth.login();
-        } catch (err) {
-          showLoginError(err.message || "Không thể bắt đầu đăng nhập Cognito.");
-          hostedLoginButton.disabled = false;
-        }
-      });
-      return;
+    } catch (err) {
+      showLoginError(err.message || "Đăng nhập Cognito thất bại.");
     }
 
     if (ApiService.Auth.isAuthenticated()) {
-      window.location.href = "index.html";
+      window.location.replace("index.html");
       return;
     }
 
@@ -92,23 +71,32 @@ const AuthModule = (() => {
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const username = usernameInput.value.trim();
-      const password = passwordInput.value;
+      const username = usernameInput ? usernameInput.value.trim() : "";
+      const password = passwordInput ? passwordInput.value : "";
 
       if (errorBox) {
         errorBox.textContent = "";
         errorBox.classList.remove("visible");
       }
 
+      if (btnLogin) {
+        btnLogin.disabled = true;
+        btnLogin.textContent = "Đang đăng nhập...";
+      }
+
       try {
         await ApiService.Auth.login(username, password);
         window.location.href = "index.html";
       } catch (err) {
-        let msg = err.message || "Dang nhap that bai";
+        let msg = err.message || "Đăng nhập thất bại";
         if (msg.includes("LOCKED") || msg.includes("khoa")) {
-          msg = "Tai khoan da bi khoa boi Quan tri vien";
+          msg = "Tài khoản đã bị khóa bởi Quản trị viên";
         }
         showLoginError(msg);
+        if (btnLogin) {
+          btnLogin.disabled = false;
+          btnLogin.textContent = "Đăng nhập";
+        }
       }
     });
   }
@@ -227,9 +215,9 @@ const AuthModule = (() => {
       updateUserStats();
       renderUserTable();
     } catch (err) {
-      console.error("Loi tai danh sach nguoi dung:", err);
+      console.error("Lỗi tải danh sách người dùng:", err);
       if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Loi tai du lieu: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Lỗi tải dữ liệu: ${err.message}</td></tr>`;
       }
     }
   }
@@ -286,7 +274,7 @@ const AuthModule = (() => {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" class="col-c text-muted cell-padded">
-            Khong tim thay tai khoan nao phu hop voi bo loc.
+            Không tìm thấy tài khoản nào phù hợp với bộ lọc.
           </td>
         </tr>
       `;
@@ -360,7 +348,7 @@ const AuthModule = (() => {
   async function toggleUserRole(userId) {
     const currentUser = ApiService.Auth.getCurrentUser();
     if (!currentUser || currentUser.role !== "Admin") {
-      showToast("Chi Admin moi co quyen thay doi vai tro", "error");
+      showToast("Chỉ Admin mới có quyền thay đổi vai trò", "error");
       return;
     }
     try {
@@ -368,17 +356,17 @@ const AuthModule = (() => {
       const user = res.data;
       const newRole = user.role === "Admin" ? "Staff" : "Admin";
       await ApiService.Users.update(userId, { role: newRole });
-      showToast(`Da doi vai tro cua ${user.username} thanh ${newRole}`, "success");
+      showToast(`Đã đổi vai trò của ${user.username} thành ${newRole}`, "success");
       loadUserList();
     } catch (err) {
-      showToast(`Loi: ${err.message}`, "error");
+      showToast(`Lỗi: ${err.message}`, "error");
     }
   }
 
   async function toggleUserStatus(userId) {
     const currentUser = ApiService.Auth.getCurrentUser();
     if (!currentUser || currentUser.role !== "Admin") {
-      showToast("Chi Admin moi co quyen khoa/mo khoa tai khoan", "error");
+      showToast("Chỉ Admin mới có quyền khoá/mở khoá tài khoản", "error");
       return;
     }
     try {
@@ -386,11 +374,11 @@ const AuthModule = (() => {
       const user = res.data;
       const newStatus = user.status === "ACTIVE" ? "LOCKED" : "ACTIVE";
       await ApiService.Users.update(userId, { status: newStatus });
-      const actionText = newStatus === "LOCKED" ? "khoa" : "mo khoa";
-      showToast(`Da ${actionText} tai khoan ${user.username}`, "success");
+      const actionText = newStatus === "LOCKED" ? "khoá" : "mở khoá";
+      showToast(`Đã ${actionText} tài khoản ${user.username}`, "success");
       loadUserList();
     } catch (err) {
-      showToast(`Loi: ${err.message}`, "error");
+      showToast(`Lỗi: ${err.message}`, "error");
     }
   }
 
@@ -399,16 +387,18 @@ const AuthModule = (() => {
     if (!user) return;
 
     showToast(
-      `Amazon Cognito: Da gui lien ket khoi phuc mat khau den email ${user.email}`,
+      `Amazon Cognito: Đã gửi liên kết khôi phục mật khẩu đến email ${user.email}`,
       "info"
     );
 
-    MockDataStore.add("systemLogs", {
-      timestamp: new Date().toISOString(),
-      logStream: "lambda/authService",
-      level: "INFO",
-      message: `AdminResetUserPassword: Da phat yeu cau dat lai mat khau cho user '${user.username}' qua Cognito User Pool.`,
-    });
+    if (typeof MockDataStore !== "undefined") {
+      MockDataStore.add("systemLogs", {
+        timestamp: new Date().toISOString(),
+        logStream: "lambda/authService",
+        level: "INFO",
+        message: `AdminResetUserPassword: Đã phát yêu cầu đặt lại mật khẩu cho user '${user.username}' qua Cognito User Pool.`,
+      });
+    }
   }
 
   function openCreateUserModal() {
@@ -428,7 +418,7 @@ const AuthModule = (() => {
     e.preventDefault();
     const currentUser = ApiService.Auth.getCurrentUser();
     if (!currentUser || currentUser.role !== "Admin") {
-      showToast("Chi Admin moi co quyen tao tai khoan", "error");
+      showToast("Chỉ Admin mới có quyền tạo tài khoản", "error");
       return;
     }
 
@@ -438,14 +428,14 @@ const AuthModule = (() => {
     const role = document.getElementById("new-user-role")?.value;
 
     if (!username || !fullName || !email) {
-      showToast("Vui long dien day du thong tin bat buoc", "warning");
+      showToast("Vui lòng điền đầy đủ thông tin bắt buộc", "warning");
       return;
     }
 
      
     const existing = allUsers.find((u) => u.username === username);
     if (existing) {
-      showToast(`Ten dang nhap ${username} da ton tai trong he thong`, "error");
+      showToast(`Tên đăng nhập ${username} đã tồn tại trong hệ thống`, "error");
       return;
     }
 
@@ -461,18 +451,20 @@ const AuthModule = (() => {
 
       await ApiService.Users.create(newUser);
 
-      MockDataStore.add("systemLogs", {
-        timestamp: new Date().toISOString(),
-        logStream: "lambda/authService",
-        level: "INFO",
-        message: `AdminCreateUser: Da tao thanh cong tai khoan moi '${username}' (Role: ${role}) tren Cognito User Pool.`,
-      });
+      if (typeof MockDataStore !== "undefined") {
+        MockDataStore.add("systemLogs", {
+          timestamp: new Date().toISOString(),
+          logStream: "lambda/authService",
+          level: "INFO",
+          message: `AdminCreateUser: Đã tạo thành công tài khoản mới '${username}' (Role: ${role}) trên Cognito User Pool.`,
+        });
+      }
 
-      showToast(`Tao tai khoan ${username} thanh cong (Cognito Simulated)`, "success");
+      showToast(`Tạo tài khoản ${username} thành công (Cognito Simulated)`, "success");
       closeCreateUserModal();
       loadUserList();
     } catch (err) {
-      showToast(`Loi tao tai khoan: ${err.message}`, "error");
+      showToast(`Lỗi tạo tài khoản: ${err.message}`, "error");
     }
   }
 

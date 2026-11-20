@@ -20,7 +20,7 @@ const ReportsModule = (() => {
   async function loadTransactions() {
     const tbody = document.getElementById("report-txn-table-body");
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="9" class="col-c text-muted">Dang truy van du lieu DynamoDB...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="col-c text-muted">Đang truy vấn dữ liệu DynamoDB...</td></tr>`;
     }
 
     try {
@@ -48,9 +48,9 @@ const ReportsModule = (() => {
       populatePerformerFilter();
       renderTransactionsTable();
     } catch (err) {
-      console.error("Loi tai lich su giao dich:", err);
+      console.error("Lỗi tải lịch sử giao dịch:", err);
       if (window.AuthModule) {
-        AuthModule.showToast("Loi tai giao dich: " + err.message, "error");
+        AuthModule.showToast("Lỗi tải giao dịch: " + err.message, "error");
       }
     }
   }
@@ -63,7 +63,7 @@ const ReportsModule = (() => {
       new Set(transactionList.map((t) => t.performedBy).filter(Boolean))
     );
 
-    let html = `<option value="ALL">Tat ca nguoi thuc hien</option>`;
+    let html = `<option value="ALL">Tất cả người thực hiện</option>`;
     performers.forEach((p) => {
       html += `<option value="${p}">${p}</option>`;
     });
@@ -106,7 +106,7 @@ const ReportsModule = (() => {
       tbody.innerHTML = `
         <tr>
           <td colspan="9" class="col-c text-muted cell-padded">
-            Khong tim thay giao dich nao phu hop voi tieu chi tra cuu.
+            Không tìm thấy giao dịch nào phù hợp với tiêu chí tra cứu.
           </td>
         </tr>
       `;
@@ -117,8 +117,8 @@ const ReportsModule = (() => {
       .map((t) => {
         const isIN = t.type === "IN";
         const typeBadge = isIN
-          ? `<span class="badge badge-in">NHAP KHO</span>`
-          : `<span class="badge badge-out">XUAT KHO</span>`;
+          ? `<span class="badge badge-in">NHẬP KHO</span>`
+          : `<span class="badge badge-out">XUẤT KHO</span>`;
 
         const amountFormatted = isIN
           ? `<span class="text-success font-semibold">+${formatNumber(t.amount)}</span>`
@@ -130,7 +130,7 @@ const ReportsModule = (() => {
         }
 
         const invoiceLink = t.invoiceUrl
-          ? `<a href="javascript:void(0)" class="badge badge-info" onclick="ReportsModule.viewInvoice('${t.transactionId}')" title="${t.invoiceUrl}">Xem chung tu S3</a>`
+          ? `<a href="javascript:void(0)" class="badge badge-info" onclick="ReportsModule.viewInvoice('${t.transactionId}')" title="${t.invoiceUrl}">Xem chứng từ S3</a>`
           : `<span class="text-muted">-</span>`;
 
         return `
@@ -156,7 +156,7 @@ const ReportsModule = (() => {
 
     if (window.AuthModule) {
       AuthModule.showToast(
-        `Pre-signed URL S3: ${t.invoiceUrl} (Giao dich: ${t.transactionId})`,
+        `Pre-signed URL S3: ${t.invoiceUrl} (Giao dịch: ${t.transactionId})`,
         "info"
       );
     }
@@ -165,7 +165,7 @@ const ReportsModule = (() => {
   function exportExcel() {
     const filtered = getFilteredTransactions();
     if (filtered.length === 0) {
-      if (window.AuthModule) AuthModule.showToast("Khong co du lieu de xuat Excel", "warning");
+      if (window.AuthModule) AuthModule.showToast("Không có dữ liệu để xuất Excel", "warning");
       return;
     }
 
@@ -179,12 +179,12 @@ const ReportsModule = (() => {
       "Ma Giao Dich": t.transactionId,
       "Ngay Gio": formatDateTimeFull(t.timestamp),
       "Nguoi Thuc Hien": t.performedBy || "",
-      "Loai Thao Tac": t.type === "IN" ? "Nhap kho" : "Xuat kho",
+      "Loại Thao Tác": t.type === "IN" ? "Nhập kho" : "Xuất kho",
       "Ma San Pham": t.productId,
       "Ten San Pham": t.productName,
       "So Luong": t.amount,
-      "Ly Do / Nha Cung Cap": t.supplierName ? `NCC: ${t.supplierName} (${t.reason || ""})` : t.reason || "",
-      "Chung Tu S3": t.invoiceUrl || "Khong co",
+      "Lý Do / Nhà Cung Cấp": t.supplierName ? `NCC: ${t.supplierName} (${t.reason || ""})` : t.reason || "",
+      "Chứng Từ S3": t.invoiceUrl || "Không có",
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -209,14 +209,14 @@ const ReportsModule = (() => {
     XLSX.writeFile(wb, fileName);
 
     if (window.AuthModule) {
-      AuthModule.showToast(`Da xuat file Excel: ${fileName}`, "success");
+      AuthModule.showToast(`Đã xuất file Excel: ${fileName}`, "success");
     }
   }
 
   function exportPDF() {
     const filtered = getFilteredTransactions();
     if (filtered.length === 0) {
-      if (window.AuthModule) AuthModule.showToast("Khong co du lieu de xuat PDF", "warning");
+      if (window.AuthModule) AuthModule.showToast("Không có dữ liệu để xuất PDF", "warning");
       return;
     }
 
@@ -270,14 +270,14 @@ const ReportsModule = (() => {
       <table class="pdf-table">
         <thead>
           <tr class="pdf-thead-tr">
-            <th class="pdf-th">Ma GD</th>
-            <th class="pdf-th">Thoi gian</th>
-            <th class="pdf-th">Nguoi TH</th>
-            <th class="pdf-th-c">Loai</th>
-            <th class="pdf-th">Ma SP</th>
-            <th class="pdf-th">Ten mat hang</th>
-            <th class="pdf-th-r">So luong</th>
-            <th class="pdf-th">Ly do / NCC</th>
+            <th class="pdf-th">Mã GD</th>
+            <th class="pdf-th">Thời gian</th>
+            <th class="pdf-th">Người TH</th>
+            <th class="pdf-th-c">Loại</th>
+            <th class="pdf-th">Mã SP</th>
+            <th class="pdf-th">Tên mặt hàng</th>
+            <th class="pdf-th-r">Số lượng</th>
+            <th class="pdf-th">Lý do / NCC</th>
           </tr>
         </thead>
         <tbody>
@@ -290,7 +290,7 @@ const ReportsModule = (() => {
               <td class="pdf-td col-mono">${formatDateTime(t.timestamp)}</td>
               <td class="pdf-td">${t.performedBy || "-"}</td>
               <td class="pdf-td-c font-semibold ${t.type === "IN" ? "text-success" : "text-danger"}">
-                ${t.type === "IN" ? "NHAP" : "XUAT"}
+                ${t.type === "IN" ? "NHẬP" : "XUẤT"}
               </td>
               <td class="pdf-td col-mono">${t.productId}</td>
               <td class="pdf-td">${t.productName}</td>
@@ -308,17 +308,17 @@ const ReportsModule = (() => {
 
       ${
         filtered.length > 35
-          ? `<p class="pdf-notice">(Hien thi 35 tren tong so ${filtered.length} ban ghi trong file in PDF)</p>`
+          ? `<p class="pdf-notice">(Hiển thị 35 trên tổng số ${filtered.length} bản ghi trong file in PDF)</p>`
           : ""
       }
 
       <div class="pdf-sign-row">
         <div class="pdf-sign-box">
-          <p class="pdf-sign-title">Nguoi lap bieu</p>
+          <p class="pdf-sign-title">Người lập biểu</p>
           <div class="pdf-sign-name">${performer}</div>
         </div>
         <div class="pdf-sign-box">
-          <p class="pdf-sign-title">Xac nhan Quan ly</p>
+          <p class="pdf-sign-title">Xác nhận Quản lý</p>
           <div class="pdf-sign-name">Ban Giam Doc</div>
         </div>
       </div>
@@ -337,10 +337,10 @@ const ReportsModule = (() => {
       .from(printContainer)
       .save()
       .then(() => {
-        if (window.AuthModule) AuthModule.showToast("Da xuat bao cao PDF thanh cong", "success");
+        if (window.AuthModule) AuthModule.showToast("Đã xuất báo cáo PDF thành công", "success");
       })
       .catch((err) => {
-        if (window.AuthModule) AuthModule.showToast("Loi xuat PDF: " + err.message, "error");
+        if (window.AuthModule) AuthModule.showToast("Lỗi xuất PDF: " + err.message, "error");
       });
   }
 
@@ -350,7 +350,7 @@ const ReportsModule = (() => {
   async function loadLogs() {
     const tbody = document.getElementById("report-log-table-body");
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="4" class="col-c text-muted">Dang ket noi Amazon CloudWatch Logs API...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="col-c text-muted">Đang kết nối Amazon CloudWatch Logs API...</td></tr>`;
     }
 
     try {
@@ -362,9 +362,9 @@ const ReportsModule = (() => {
       updateLogCounterBadges();
       renderLogsTable();
     } catch (err) {
-      console.error("Loi tai CloudWatch logs:", err);
+      console.error("Lỗi tải CloudWatch logs:", err);
       if (window.AuthModule) {
-        AuthModule.showToast("Loi tai CloudWatch Logs: " + err.message, "error");
+        AuthModule.showToast("Lỗi tải CloudWatch Logs: " + err.message, "error");
       }
     }
   }
@@ -405,7 +405,7 @@ const ReportsModule = (() => {
       tbody.innerHTML = `
         <tr>
           <td colspan="4" class="col-c text-muted cell-padded">
-            Khong tim thay ban ghi log nao phu hop voi bo loc.
+            Không tìm thấy bản ghi log nào phù hợp với bộ lọc.
           </td>
         </tr>
       `;
@@ -460,30 +460,32 @@ const ReportsModule = (() => {
       {
         stream: "/aws/lambda/processStockTransaction",
         level: "WARN",
-        msg: `SNS Publish: Topic 'arn:aws:sns:ap-southeast-1:123456789:InventoryLowStockAlert' duoc kich hoat boi DynamoDB Streams. San pham prod-002 xuong duoi nguong an toan (8 < 50). Email da gui toi Ban Quan Ly.`,
+        msg: `SNS Publish: Topic 'arn:aws:sns:ap-southeast-1:123456789:InventoryLowStockAlert' được kích hoạt bởi DynamoDB Streams. Sản phẩm prod-002 xuống dưới ngưỡng an toàn (8 < 50). Email đã gửi tới Ban Quản Lý.`,
       },
       {
         stream: "/aws/lambda/inventoryService",
         level: "ERROR",
-        msg: `DynamoDB ConditionalCheckFailedException: Giao dich xuat kho prod-007 bi tu choi do ton kho hien tai nho hon so luong yeu cau (Requested: 50, Available: 3). HTTP 400 Bad Request.`,
+        msg: `DynamoDB ConditionalCheckFailedException: Giao dịch xuất kho prod-007 bị từ chối do tồn kho hiện tại nhỏ hơn số lượng yêu cầu (Requested: 50, Available: 3). HTTP 400 Bad Request.`,
       },
     ];
 
      
     const ev = eventTypes[Math.floor(Math.random() * eventTypes.length)];
 
-    MockDataStore.add("systemLogs", {
-      timestamp: new Date().toISOString(),
-      logStream: ev.stream,
-      level: ev.level,
-      message: ev.msg,
-    });
+    if (typeof MockDataStore !== "undefined") {
+      MockDataStore.add("systemLogs", {
+        timestamp: new Date().toISOString(),
+        logStream: ev.stream,
+        level: ev.level,
+        message: ev.msg,
+      });
+    }
 
     loadLogs();
 
     if (window.AuthModule) {
       AuthModule.showToast(
-        `Da ban su kien CloudWatch moi: [${ev.level}] ${ev.stream}`,
+        `Đã bắn sự kiện CloudWatch mới: [${ev.level}] ${ev.stream}`,
         ev.level === "ERROR" ? "error" : ev.level === "WARN" ? "warning" : "info"
       );
     }
@@ -556,7 +558,7 @@ const ReportsModule = (() => {
       refreshLogBtn.addEventListener("click", () => {
         loadLogs();
         if (window.AuthModule) {
-          AuthModule.showToast("Da dong bo toan bo Log Streams tu CloudWatch", "info");
+          AuthModule.showToast("Đã đồng bộ toàn bộ Log Streams từ CloudWatch", "info");
         }
       });
     }
