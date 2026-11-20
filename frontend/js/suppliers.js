@@ -16,9 +16,9 @@
       productList = prodRes.data || [];
       renderSupplierTable();
     } catch (err) {
-      console.error("Loi tai nha cung cap:", err);
+      console.error("Lỗi tải nhà cung cấp:", err);
       if (window.AuthModule) {
-        AuthModule.showToast("Loi tai nha cung cap: " + err.message, "error");
+        AuthModule.showToast("Lỗi tải nhà cung cấp: " + err.message, "error");
       }
     }
   }
@@ -54,7 +54,7 @@
       tbody.innerHTML = `
         <tr>
           <td colspan="6" class="col-c text-muted cell-padded-lg">
-            Khong tim thay nha cung cap nao phu hop voi tu khoa tim kiem.
+            Không tìm thấy nhà cung cấp nào phù hợp với từ khoá tìm kiếm.
           </td>
         </tr>
       `;
@@ -74,8 +74,8 @@
         const prodCount = productCountMap[s.supplierId] || 0;
         const countBadgeHtml =
           prodCount > 0
-            ? `<span class="badge badge-info">${prodCount} san pham</span>`
-            : `<span class="badge badge-neutral">Chua co</span>`;
+            ? `<span class="badge badge-info">${prodCount} sản phẩm</span>`
+            : `<span class="badge badge-neutral">Chưa có</span>`;
 
         return `
           <tr>
@@ -90,14 +90,14 @@
                 class="btn btn-secondary btn-sm"
                 onclick="SuppliersModule.openEditModal('${s.supplierId}')"
               >
-                Sua
+                Sửa
               </button>
               <button
                 type="button"
                 class="btn btn-danger btn-sm"
                 onclick="SuppliersModule.confirmDelete('${s.supplierId}')"
               >
-                Xoa
+                Xóa
               </button>
             </td>
           </tr>
@@ -115,7 +115,7 @@
     const title = document.getElementById("modal-supplier-title");
 
     if (form) form.reset();
-    if (title) title.textContent = "Them Nha Cung Cap Moi";
+    if (title) title.textContent = "Thêm nhà cung cấp mới";
 
      
     const idInput = document.getElementById("sup-form-id");
@@ -139,7 +139,7 @@
     const phoneInput = document.getElementById("sup-form-phone");
     const addressInput = document.getElementById("sup-form-address");
 
-    if (title) title.textContent = `Chinh sua: ${sup.supplierId}`;
+    if (title) title.textContent = `Chỉnh sửa: ${sup.supplierId}`;
     if (idInput) {
       idInput.value = sup.supplierId;
       idInput.readOnly = true;
@@ -168,7 +168,7 @@
 
     if (!supplierId || !name) {
       if (window.AuthModule) {
-        AuthModule.showToast("Vui long nhap Ma NCC va Ten cong ty", "warning");
+        AuthModule.showToast("Vui lòng nhập Mã NCC và Tên công ty", "warning");
       }
       return;
     }
@@ -179,19 +179,19 @@
       if (editingSupplierId) {
         await ApiService.Suppliers.update(editingSupplierId, payload);
         if (window.AuthModule) {
-          AuthModule.showToast(`Da cap nhat nha cung cap: ${name}`, "success");
+          AuthModule.showToast(`Cập nhật nhà cung cấp: ${name}`, "success");
         }
       } else {
         const existing = supplierList.find((s) => s.supplierId === supplierId);
         if (existing) {
           if (window.AuthModule) {
-            AuthModule.showToast(`Ma NCC ${supplierId} da ton tai`, "error");
+            AuthModule.showToast(`Mã NCC ${supplierId} đã tồn tại`, "error");
           }
           return;
         }
         await ApiService.Suppliers.create(payload);
         if (window.AuthModule) {
-          AuthModule.showToast(`Them NCC thanh cong: ${name}`, "success");
+          AuthModule.showToast(`Thêm NCC thành công: ${name}`, "success");
         }
       }
 
@@ -199,7 +199,7 @@
       await loadSuppliers();
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi: ${err.message}`, "error");
       }
     }
   }
@@ -218,11 +218,11 @@
         .slice(0, 3)
         .map((p) => `${p.name} (${p.productId})`)
         .join(", ");
-      const moreText = linkedProducts.length > 3 ? ` va ${linkedProducts.length - 3} mat hang khac` : "";
+      const moreText = linkedProducts.length > 3 ? ` và ${linkedProducts.length - 3} mặt hàng khác` : "";
 
       if (window.AuthModule) {
         AuthModule.showToast(
-          `Khong the xoa! Nha cung cap nay dang lien ket voi ${linkedProducts.length} mat hang: ${prodNames}${moreText}. Hay chuyen hoac xoa cac san pham tren truoc.`,
+          `Không thể xoá! Nhà cung cấp này đang liên kết với ${linkedProducts.length} mặt hàng: ${prodNames}${moreText}. Hãy chuyển hoặc xoá các sản phẩm trên trước.`,
           "error"
         );
       }
@@ -233,7 +233,7 @@
     deletingSupplierId = supplierId;
     const msgEl = document.getElementById("confirm-delete-supplier-msg");
     if (msgEl) {
-      msgEl.textContent = `Ban co chac chan muon xoa Nha cung cap "${sup.name}" (Ma: ${sup.supplierId})? Thao tac nay se cap nhat vao DynamoDB va khong the hoan tac.`;
+      msgEl.textContent = `Bạn có chắc chắn muốn xoá Nhà cung cấp "${sup.name}" (Mã: ${sup.supplierId})? Thao tác này sẽ cập nhật vào DynamoDB và không thể hoàn tác.`;
     }
 
     const modal = document.getElementById("modal-confirm-delete-supplier");
@@ -252,13 +252,13 @@
     try {
       await ApiService.Suppliers.delete(deletingSupplierId);
       if (window.AuthModule) {
-        AuthModule.showToast("Da xoa nha cung cap thanh cong", "success");
+        AuthModule.showToast("Đã xoá nhà cung cấp thành công", "success");
       }
       closeDeleteModal();
       await loadSuppliers();
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi xoa nha cung cap: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi xoá nhà cung cấp: ${err.message}`, "error");
       }
     }
   }

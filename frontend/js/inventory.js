@@ -25,9 +25,9 @@ const InventoryModule = (() => {
        
       checkPrefillFromDashboard();
     } catch (err) {
-      console.error("Loi tai du lieu kho:", err);
+      console.error("Lỗi tải dữ liệu kho:", err);
       if (window.AuthModule) {
-        AuthModule.showToast("Loi tai du lieu nghiep vu kho: " + err.message, "error");
+        AuthModule.showToast("Lỗi tải dữ liệu nghiệp vụ kho: " + err.message, "error");
       }
     }
   }
@@ -38,14 +38,14 @@ const InventoryModule = (() => {
     const supSelect = document.getElementById("inv-in-supplier");
 
      
-    let inProdHtml = `<option value="">-- Chon san pham nhap --</option>`;
+    let inProdHtml = `<option value="">-- Chọn sản phẩm nhập --</option>`;
      
-    let outProdHtml = `<option value="">-- Chon san pham xuat --</option>`;
+    let outProdHtml = `<option value="">-- Chọn sản phẩm xuất --</option>`;
 
     productList.forEach((p) => {
       const isLow = (p.quantity || 0) < (p.minThreshold || 0);
-      const tag = isLow ? " [DUOI NGUONG]" : "";
-      inProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Ton hien tai: ${p.quantity})${tag}</option>`;
+      const tag = isLow ? " [DƯỚI NGƯỠNG]" : "";
+      inProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Tồn hiện tại: ${p.quantity})${tag}</option>`;
       outProdHtml += `<option value="${p.productId}">${p.productId} - ${p.name} (Kha dung: ${p.quantity})${tag}</option>`;
     });
 
@@ -54,7 +54,7 @@ const InventoryModule = (() => {
 
      
     if (supSelect) {
-      let supHtml = `<option value="">-- Chon nha cung cap --</option>`;
+      let supHtml = `<option value="">-- Chọn nhà cung cấp --</option>`;
       supplierList.forEach((s) => {
         supHtml += `<option value="${s.supplierId}">${s.name} (${s.supplierId})</option>`;
       });
@@ -139,7 +139,7 @@ const InventoryModule = (() => {
 
      
     if (!productId) {
-      if (window.AuthModule) AuthModule.showToast("Vui long chon san pham can nhap kho", "warning");
+      if (window.AuthModule) AuthModule.showToast("Vui lòng chọn sản phẩm cần nhập kho", "warning");
       return;
     }
 
@@ -168,7 +168,7 @@ const InventoryModule = (() => {
       productName: prod.name,
       amount,
       supplierId,
-      reason: note || "Nhap kho bo sung hang hoa",
+      reason: note || "Nhập kho bổ sung hàng hoá",
       invoiceUrl,
     };
 
@@ -178,19 +178,21 @@ const InventoryModule = (() => {
 
        
       const supObj = supplierList.find((s) => s.supplierId === supplierId);
-      const supName = supObj ? supObj.name : "Ngoai danh muc";
+      const supName = supObj ? supObj.name : "Ngoài danh mục";
       const s3Log = attachedInvoiceName ? ` - File S3: ${attachedInvoiceName}` : "";
 
-      MockDataStore.add("systemLogs", {
-        timestamp: new Date().toISOString(),
-        logStream: "lambda/inventoryService",
-        level: "INFO",
-        message: `POST /transactions [IN] - Nhap kho thanh cong: +${amount} ${prod.name} (NCC: ${supName}) boi ${performedBy}${s3Log}`,
-      });
+      if (typeof MockDataStore !== "undefined") {
+        MockDataStore.add("systemLogs", {
+          timestamp: new Date().toISOString(),
+          logStream: "lambda/inventoryService",
+          level: "INFO",
+          message: `POST /transactions [IN] - Nhập kho thành công: +${amount} ${prod.name} (NCC: ${supName}) bởi ${performedBy}${s3Log}`,
+        });
+      }
 
       if (window.AuthModule) {
         AuthModule.showToast(
-          `Nhap kho thanh cong: +${amount} ${prod.name}. Ton kho moi: ${prod.quantity + amount}`,
+          `Nhập kho thành công: +${amount} ${prod.name}. Tồn kho mới: ${prod.quantity + amount}`,
           "success"
         );
       }
@@ -202,7 +204,7 @@ const InventoryModule = (() => {
       attachedInvoiceData = "";
       const dropzoneText = document.getElementById("inv-dropzone-text");
       if (dropzoneText) {
-        dropzoneText.textContent = "Keo tha hoa don / chung tu (PDF, JPG, PNG) hoac bam de chon tep";
+        dropzoneText.textContent = "Kéo thả hoá đơn / chứng từ (PDF, JPG, PNG) hoặc bấm để chọn tệp";
       }
 
        
@@ -212,7 +214,7 @@ const InventoryModule = (() => {
       if (window.DashboardModule) DashboardModule.renderDashboard();
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi nhap kho: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi nhập kho: ${err.message}`, "error");
       }
     }
   }
@@ -271,7 +273,7 @@ const InventoryModule = (() => {
         warningBox.style.background = "var(--danger-light)";
         warningBox.style.borderColor = "#fecaca";
         warningBox.style.color = "var(--danger)";
-        warningBox.textContent = `KHONG THE XUAT KHO! So luong xuat (${amount}) lon hon so luong ton kho hien tai (${currentQty}). Vui long kiem tra lai.`;
+        warningBox.textContent = `KHÔNG THỂ XUẤT KHO! Số lượng xuất (${amount}) lớn hơn số lượng tồn kho hiện tại (${currentQty}). Vui lòng kiểm tra lại.`;
       }
       if (submitBtn) submitBtn.disabled = true;
     } else if (projectedQty < minThreshold) {
@@ -282,7 +284,7 @@ const InventoryModule = (() => {
         warningBox.style.background = "var(--warning-light)";
         warningBox.style.borderColor = "#fde68a";
         warningBox.style.color = "var(--warning)";
-        warningBox.textContent = `CANH BAO TON KHO THAP: Sau khi xuat, so luong ton con lai la ${projectedQty}, se thap hon muc toi thieu (${minThreshold}). He thong se tu dong ghi nhan canh bao CloudWatch & kich hoat Lambda SNS.`;
+        warningBox.textContent = `CẢNH BÁO TỒN KHO THẤP: Sau khi xuất, số lượng tồn còn lại là ${projectedQty}, sẽ thấp hơn mức tối thiểu (${minThreshold}). Hệ thống sẽ tự động ghi nhận cảnh báo CloudWatch & kích hoạt Lambda SNS.`;
       }
       if (submitBtn) submitBtn.disabled = false;
     } else {
@@ -302,7 +304,7 @@ const InventoryModule = (() => {
     const amount = parseInt(amountVal, 10);
 
     if (!productId) {
-      if (window.AuthModule) AuthModule.showToast("Vui long chon san pham can xuat kho", "warning");
+      if (window.AuthModule) AuthModule.showToast("Vui lòng chọn sản phẩm cần xuất kho", "warning");
       return;
     }
 
@@ -318,7 +320,7 @@ const InventoryModule = (() => {
     if (amount > prod.quantity) {
       if (window.AuthModule) {
         AuthModule.showToast(
-          `Loi chan xuat: So luong xuat (${amount}) vuot qua ton hien tai (${prod.quantity})`,
+          `Lỗi chặn xuất: Số lượng xuất (${amount}) vượt quá tồn hiện tại (${prod.quantity})`,
           "error"
         );
       }
@@ -355,34 +357,38 @@ const InventoryModule = (() => {
          
         if (window.AuthModule) {
           AuthModule.showToast(
-            `CANH BAO: Ton kho san pham ${prod.name} con ${remainingQty} (duoi nguong ${prod.minThreshold})! Da kich hoat Lambda SNS canh bao qua email.`,
+            `CẢNH BÁO: Tồn kho sản phẩm ${prod.name} còn ${remainingQty} (dưới ngưỡng ${prod.minThreshold})! Đã kích hoạt Lambda SNS cảnh báo qua email.`,
             "warning"
           );
         }
 
          
-        MockDataStore.add("systemLogs", {
-          timestamp: new Date().toISOString(),
-          logStream: "lambda/alertService",
-          level: "WARN",
-          message: `CANH BAO TON KHO: San pham ${prod.productId} (${prod.name}) giam xuong con ${remainingQty} < nguong toi thieu (${prod.minThreshold}). Lambda SNS: Da phat canh bao toi Ban quan ly kho.`,
-        });
+        if (typeof MockDataStore !== "undefined") {
+          MockDataStore.add("systemLogs", {
+            timestamp: new Date().toISOString(),
+            logStream: "lambda/alertService",
+            level: "WARN",
+            message: `CẢNH BÁO TỒN KHO: Sản phẩm ${prod.productId} (${prod.name}) giảm xuống còn ${remainingQty} < ngưỡng tối thiểu (${prod.minThreshold}). Lambda SNS: Đã phát cảnh báo tới Ban quản lý kho.`,
+          });
+        }
       } else {
         if (window.AuthModule) {
           AuthModule.showToast(
-            `Xuat kho thanh cong: -${amount} ${prod.name}. Ton con lai: ${remainingQty}`,
+            `Xuất kho thành công: -${amount} ${prod.name}. Tồn còn lại: ${remainingQty}`,
             "success"
           );
         }
       }
 
        
-      MockDataStore.add("systemLogs", {
-        timestamp: new Date().toISOString(),
-        logStream: "lambda/inventoryService",
-        level: "INFO",
-        message: `POST /transactions [OUT] - Xuat kho thanh cong: -${amount} ${prod.name} (Ly do: ${fullReason}) boi ${performedBy}`,
-      });
+      if (typeof MockDataStore !== "undefined") {
+        MockDataStore.add("systemLogs", {
+          timestamp: new Date().toISOString(),
+          logStream: "lambda/inventoryService",
+          level: "INFO",
+          message: `POST /transactions [OUT] - Xuất kho thành công: -${amount} ${prod.name} (Lý do: ${fullReason}) bởi ${performedBy}`,
+        });
+      }
 
        
       document.getElementById("form-outbound")?.reset();
@@ -396,7 +402,7 @@ const InventoryModule = (() => {
       if (window.DashboardModule) DashboardModule.renderDashboard();
     } catch (err) {
       if (window.AuthModule) {
-        AuthModule.showToast(`Loi xuat kho: ${err.message}`, "error");
+        AuthModule.showToast(`Lỗi xuất kho: ${err.message}`, "error");
       }
     }
   }
@@ -446,7 +452,7 @@ const InventoryModule = (() => {
         })
         .join("");
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Loi tai lich su giao dich: ${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Lỗi tải lịch sử giao dịch: ${err.message}</td></tr>`;
     }
   }
 
@@ -492,7 +498,7 @@ const InventoryModule = (() => {
 
       if (!isPdfOrImg) {
         if (window.AuthModule) {
-          AuthModule.showToast("Chi chap nhan tep PDF, JPG hoac PNG", "warning");
+          AuthModule.showToast("Chỉ chấp nhận tệp PDF, JPG hoặc PNG", "warning");
         }
         return;
       }
@@ -502,10 +508,10 @@ const InventoryModule = (() => {
       reader.onload = (evt) => {
         attachedInvoiceData = evt.target.result;
         if (dropzoneText) {
-          dropzoneText.textContent = `Da chon tep: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - San sang day len S3`;
+          dropzoneText.textContent = `Đã chọn tệp: ${file.name} (${(file.size / 1024).toFixed(1)} KB) - Sẵn sàng đẩy lên S3`;
         }
         if (window.AuthModule) {
-          AuthModule.showToast(`Da nap chung tu ${file.name} vao phieu nhap (S3)`, "info");
+          AuthModule.showToast(`Đã nạp chứng từ ${file.name} vào phiếu nhập (S3)`, "info");
         }
       };
       reader.readAsDataURL(file);

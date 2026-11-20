@@ -19,23 +19,14 @@
 
     <div id="login-error" class="login-error"></div>
 
-    <div id="hosted-login-section" class="hidden">
-      <p class="login-hint">
-        Đăng nhập bảo mật qua Amazon Cognito Hosted UI.
-      </p>
-      <button type="button" class="btn btn-primary btn-block" id="btn-hosted-login">
-        Đăng nhập với Cognito
-      </button>
-    </div>
-
     <form id="login-form" autocomplete="off">
       <div class="form-group">
-        <label class="form-label" for="login-username">Tên đăng nhập</label>
+        <label class="form-label" for="login-username">Tên đăng nhập / Email</label>
         <input
           type="text"
           id="login-username"
           class="form-input"
-          placeholder="Nhập username"
+          placeholder="Nhập email hoặc username"
           autocomplete="username"
           required
         >
@@ -57,43 +48,11 @@
         Đăng nhập
       </button>
     </form>
-
-    <hr class="login-divider" id="login-divider">
-
-    <div class="login-hint" id="login-hint">
-      <p class="login-hint-title">Tài khoản demo &mdash; Mật khẩu: 1</p>
-      <table class="login-hint-table">
-        <thead>
-          <tr>
-            <th>Vai trò</th>
-            <th>Username</th>
-            <th>Trạng thái</th>
-          </tr>
-        </thead>
-        <tbody id="hint-accounts">
-          <tr data-user="admin.nguyen">
-            <td class="hint-role">Admin</td>
-            <td>admin.nguyen</td>
-            <td class="hint-active">ACTIVE</td>
-          </tr>
-          <tr data-user="staff.tran">
-            <td class="hint-role">Staff</td>
-            <td>staff.tran</td>
-            <td class="hint-active">ACTIVE</td>
-          </tr>
-          <tr data-user="staff.pham">
-            <td class="hint-role">Staff</td>
-            <td>staff.pham</td>
-            <td class="hint-locked">LOCKED</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
 <script src="js/config.js"></script>
-<script src="js/mock-data.js"></script>
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 </body>

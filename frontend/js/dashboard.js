@@ -135,7 +135,7 @@ const DashboardModule = (() => {
         labels: days,
         datasets: [
           {
-            label: "Nhap kho (IN)",
+            label: "Nhập kho (IN)",
             data: inSeries,
             backgroundColor: "#2563eb",  
             borderColor: "#1d4ed8",
@@ -145,7 +145,7 @@ const DashboardModule = (() => {
             categoryPercentage: 0.6,
           },
           {
-            label: "Xuat kho (OUT)",
+            label: "Xuất kho (OUT)",
             data: outSeries,
             backgroundColor: "#d97706",  
             borderColor: "#b45309",
@@ -325,7 +325,7 @@ const DashboardModule = (() => {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" class="col-c text-muted cell-padded">
-            Moi mat hang trong kho deu dat tren nguong toi thieu an toan.
+            Mọi mặt hàng trong kho đều đạt trên ngưỡng tối thiểu an toàn.
           </td>
         </tr>
       `;
@@ -380,7 +380,7 @@ const DashboardModule = (() => {
      
     if (window.AuthModule && typeof window.AuthModule.showToast === "function") {
       window.AuthModule.showToast(
-        `Da chon ma san pham: ${productId} cho phieu nhap kho`,
+        `Đã chọn mã sản phẩm: ${productId} cho phiếu nhập kho`,
         "info"
       );
     }
@@ -410,9 +410,9 @@ const DashboardModule = (() => {
        
       renderLowStockTable(products);
     } catch (err) {
-      console.error("Loi khi render Dashboard:", err);
+      console.error("Lỗi khi render Dashboard:", err);
       if (window.AuthModule && typeof window.AuthModule.showToast === "function") {
-        window.AuthModule.showToast("Loi tai du lieu Dashboard: " + err.message, "error");
+        window.AuthModule.showToast("Lỗi tải dữ liệu Dashboard: " + err.message, "error");
       }
     }
   }
