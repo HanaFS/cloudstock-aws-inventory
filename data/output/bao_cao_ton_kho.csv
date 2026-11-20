@@ -1,0 +1,26 @@
+﻿Mã SP,Tên sản phẩm,Danh mục,Đơn giá (VND),Tồn kho,Ngưỡng tối thiểu,Giá trị tồn (VND),Trạng thái
+PRD-002,Laptop ASUS ZenBook 14 OLED,Laptop,24900000,10,3,249000000,Còn hàng
+PRD-004,Laptop Apple MacBook Air M2 13 inch,Laptop,26990000,11,3,296890000,Còn hàng
+PRD-001,Laptop Dell XPS 15 9530,Laptop,52900000,8,3,423200000,Còn hàng
+PRD-005,Laptop HP Pavilion 15,Laptop,15490000,3,4,46470000,Sắp hết
+PRD-003,Laptop Lenovo ThinkPad X1 Carbon Gen 11,Laptop,38900000,6,2,233400000,Còn hàng
+PRD-020,CPU Intel Core i5-13400F,Linh kiện,4590000,23,6,105570000,Còn hàng
+PRD-019,Card đồ họa GeForce RTX 4060 8GB,Linh kiện,8490000,22,4,186780000,Còn hàng
+PRD-021,Mainboard ASUS PRIME B760M,Linh kiện,3150000,0,6,0,Hết hàng
+PRD-022,Nguồn Corsair RM750e 750W,Linh kiện,2790000,30,6,83700000,Còn hàng
+PRD-018,RAM Kingston Fury 16GB DDR5,Linh kiện,1450000,62,20,89900000,Còn hàng
+PRD-017,SSD Samsung 990 PRO 1TB,Linh kiện,3290000,55,15,180950000,Còn hàng
+PRD-009,Màn hình ASUS ProArt PA278QV,Màn hình,7990000,22,3,175780000,Còn hàng
+PRD-007,Màn hình Dell U2723QE 27 inch 4K,Màn hình,13500000,19,4,256500000,Còn hàng
+PRD-006,Màn hình LG UltraGear 27GP850,Màn hình,8990000,22,5,197780000,Còn hàng
+PRD-008,Màn hình Samsung Odyssey G5 27 inch,Màn hình,6490000,14,5,90860000,Còn hàng
+PRD-015,Bàn phím Logitech MX Keys,Phụ kiện,2690000,2,8,5380000,Sắp hết
+PRD-010,Bàn phím cơ không dây Keychron K8 Pro,Phụ kiện,2450000,12,10,29400000,Còn hàng
+PRD-011,Chuột Logitech MX Master 3S,Phụ kiện,2290000,27,10,61830000,Còn hàng
+PRD-014,Chuột Razer DeathAdder V3,Phụ kiện,1590000,63,10,100170000,Còn hàng
+PRD-016,Hub USB-C Anker 7 cổng,Phụ kiện,1190000,0,12,0,Hết hàng
+PRD-012,Tai nghe Sony WH-1000XM5,Phụ kiện,7490000,18,5,134820000,Còn hàng
+PRD-013,Webcam Logitech C920 HD Pro,Phụ kiện,1890000,3,8,5670000,Sắp hết
+PRD-023,Router TP-Link Archer AX55,Thiết bị mạng,1590000,33,8,52470000,Còn hàng
+PRD-024,Switch Cisco CBS110 8 cổng,Thiết bị mạng,1290000,2,6,2580000,Sắp hết
+TỔNG,24 sản phẩm,,,467,,3009100000,
