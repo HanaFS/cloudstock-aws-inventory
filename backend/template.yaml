@@ -300,6 +300,105 @@ Resources:
             Path: /transactions/{transactionId}
             Method: GET
 
+  ProductImagesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.product_images.handler
+      Environment:
+        Variables:
+          PRODUCTS_TABLE: !Ref ProductsTable
+          TRANSACTIONS_TABLE: !Ref TransactionsTable
+          PRODUCT_IMAGES_BUCKET: !Ref ProductImagesBucket
+          PRODUCT_IMAGES_PUBLIC_BASE_URL: !Sub https://${ProductImagesBucket}.s3.${AWS::Region}.amazonaws.com
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt ProductsTable.Arn
+                - !GetAtt TransactionsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt TransactionsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt ProductsTable.Arn
+                - !GetAtt TransactionsTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub "${ProductImagesBucket.Arn}/products/*"
+      Events:
+        CreateProductImageUpload:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /products/{productId}/image-uploads
+            Method: POST
+        AttachProductImageUpload:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /products/{productId}/image-uploads/{reservationId}/complete
+            Method: POST
+
+  ProductImagesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - Content-Type
+              - If-None-Match
+            AllowedMethods:
+              - PUT
+            AllowedOrigins:
+              - !Ref FrontendOrigin
+            ExposedHeaders:
+              - ETag
+            MaxAge: 300
+
+  ProductImagesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ProductImagesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowPublicReadForProductImagesOnly
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${ProductImagesBucket.Arn}/products/*"
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: !Sub "${ProductImagesBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
   ProductsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -374,3 +473,5 @@ Outputs:
     Value: !Ref SuppliersTable
   TransactionsTableName:
     Value: !Ref TransactionsTable
+  ProductImagesBucketName:
+    Value: !Ref ProductImagesBucket
