@@ -10,6 +10,9 @@ LOCAL_FRONTEND_ORIGIN = "http://localhost:8080"
 _COLLECTION = re.compile(r"^/(products|suppliers|transactions)$")
 _ITEM = re.compile(r"^/(products|suppliers|transactions)/([^/]+)$")
 _DASHBOARD = re.compile(r"^/dashboard(?:/stats)?$")
+_USERS = re.compile(r"^/users$")
+_USER_ITEM = re.compile(r"^/users/([^/]+)$")
+_USER_ROLE = re.compile(r"^/users/([^/]+)/role$")
 
 
 def resolve_route(method, pathname):
@@ -17,6 +20,23 @@ def resolve_route(method, pathname):
         return "health", {}
     if method == "GET" and _DASHBOARD.fullmatch(pathname):
         return "dashboard", {}
+    if method in ("GET", "POST") and _USERS.fullmatch(pathname):
+        return "users", {}
+    if method == "PUT":
+        user_role = _USER_ROLE.fullmatch(pathname)
+        if user_role:
+            try:
+                username = unquote(user_role.group(1))
+            except (UnicodeDecodeError, ValueError):
+                return None
+            return "users", {"username": username}
+    user = _USER_ITEM.fullmatch(pathname)
+    if user and method in ("GET", "PUT", "DELETE"):
+        try:
+            username = unquote(user.group(1))
+        except (UnicodeDecodeError, ValueError):
+            return None
+        return "users", {"username": username}
     collection = _COLLECTION.fullmatch(pathname)
     if collection:
         resource = collection.group(1)
@@ -83,6 +103,7 @@ class LocalApiServer(ThreadingHTTPServer):
 def create_local_api_server(handlers=None, frontend_origin=LOCAL_FRONTEND_ORIGIN):
     if handlers is None:
         from src.dashboard import handler as dashboard_handler
+        from src.users import handler as users_handler
         from src.health import handler as health_handler
         from src.products import handler as products_handler
         from src.suppliers import handler as suppliers_handler
@@ -90,6 +111,7 @@ def create_local_api_server(handlers=None, frontend_origin=LOCAL_FRONTEND_ORIGIN
 
         handlers = {
             "dashboard": dashboard_handler,
+            "users": users_handler,
             "health": health_handler,
             "products": products_handler,
             "suppliers": suppliers_handler,

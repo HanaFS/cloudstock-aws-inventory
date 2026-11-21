@@ -381,6 +381,67 @@ Resources:
             Path: /dashboard/stats
             Method: GET
 
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.users.handler
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref CloudStockUserPool
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+                - cognito-idp:ListUsersInGroup
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminRemoveUserFromGroup
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminEnableUser
+              Resource: !GetAtt CloudStockUserPool.Arn
+      Events:
+        ListUsers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users
+            Method: GET
+        CreateUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users
+            Method: POST
+        ReadUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{username}
+            Method: GET
+        UpdateUserRole:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{username}/role
+            Method: PUT
+        UpdateUserCompatibility:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{username}
+            Method: PUT
+        DisableUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{username}
+            Method: DELETE
+
   ProductImagesBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
