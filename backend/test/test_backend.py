@@ -1,6 +1,7 @@
 import json
 import os
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from scripts.local_api import configure_local_environment, create_local_api_server, resolve_route
@@ -23,6 +24,9 @@ class FakeTable:
 
     def scan(self, **kwargs):
         return {"Items": list(self.items.values())}
+
+    def query(self, **kwargs):
+        return {"Items": list(self.items.values())[:kwargs.get("Limit", 100)]}
 
 
 class FakeDynamo:
@@ -79,7 +83,7 @@ class HttpHelpersTests(unittest.TestCase):
 
 
 class ProductHandlerTests(unittest.TestCase):
-    @patch.dict(os.environ, {"PRODUCTS_TABLE": "products", "SUPPLIERS_TABLE": "suppliers"})
+    @patch.dict(os.environ, {"TABLE_PRODUCTS": "products", "TABLE_SUPPLIERS": "suppliers"})
     def test_create_product_uses_validated_values_and_conditional_write(self):
         products = FakeTable()
         dynamo = FakeDynamo({"products": products, "suppliers": FakeTable()})
@@ -91,16 +95,17 @@ class ProductHandlerTests(unittest.TestCase):
                 "name": " USB-C cable ",
                 "category": "Accessories",
                 "price": 250000,
-                "quantity": 20,
+                "stockQuantity": 20,
                 "minThreshold": 5,
                 "updatedAt": "client-value",
             }))
         self.assertEqual(result["statusCode"], 201)
         self.assertEqual(response_body(result)["data"]["name"], "USB-C cable")
+        self.assertEqual(response_body(result)["data"]["status"], "IN_STOCK")
         self.assertNotEqual(response_body(result)["data"]["updatedAt"], "client-value")
         self.assertIsNotNone(products.last_put["ConditionExpression"])
 
-    @patch.dict(os.environ, {"PRODUCTS_TABLE": "products", "SUPPLIERS_TABLE": "suppliers"})
+    @patch.dict(os.environ, {"TABLE_PRODUCTS": "products", "TABLE_SUPPLIERS": "suppliers"})
     def test_invalid_quantity_does_not_write(self):
         products = FakeTable()
         with patch("src.products.dynamodb", FakeDynamo({"products": products, "suppliers": FakeTable()})):
@@ -111,14 +116,14 @@ class ProductHandlerTests(unittest.TestCase):
                 "name": "Cable",
                 "category": "Accessories",
                 "price": 1,
-                "quantity": -1,
+                "stockQuantity": -1,
                 "minThreshold": 0,
             }))
         self.assertEqual(result["statusCode"], 400)
-        self.assertEqual(response_body(result)["code"], "INVALID_QUANTITY")
+        self.assertEqual(response_body(result)["code"], "INVALID_STOCK_QUANTITY")
         self.assertIsNone(products.last_put)
 
-    @patch.dict(os.environ, {"PRODUCTS_TABLE": "products", "SUPPLIERS_TABLE": "suppliers"})
+    @patch.dict(os.environ, {"TABLE_PRODUCTS": "products", "TABLE_SUPPLIERS": "suppliers"})
     def test_role_is_checked_before_database_access(self):
         with patch("src.products.dynamodb", FakeDynamo({})):
             from src.products import handler
@@ -130,14 +135,14 @@ class ProductHandlerTests(unittest.TestCase):
 
 class TransactionHandlerTests(unittest.TestCase):
     @patch.dict(os.environ, {
-        "TRANSACTIONS_TABLE": "transactions",
-        "PRODUCTS_TABLE": "products",
-        "SUPPLIERS_TABLE": "suppliers",
+        "TABLE_TRANSACTIONS": "transactions",
+        "TABLE_PRODUCTS": "products",
+        "TABLE_SUPPLIERS": "suppliers",
     })
     def test_transaction_builds_atomic_stock_update_and_ignores_client_identity(self):
         transactions = FakeTable()
         products = FakeTable({("prod-001",): {
-            "productId": "prod-001", "name": "Paper", "quantity": 10,
+            "productId": "prod-001", "name": "Paper", "stockQuantity": 10,
         }})
         calls = []
 
@@ -153,11 +158,11 @@ class TransactionHandlerTests(unittest.TestCase):
 
             result = handler(event("POST", {
                 "transactionId": "client-id",
-                "timestamp": "client-time",
+                "createdAt": "client-time",
                 "performedBy": "client-user",
-                "type": "OUT",
+                "type": "EXPORT",
                 "productId": "prod-001",
-                "amount": 3,
+                "quantity": 3,
                 "reason": "warehouse use",
             }, headers={"Idempotency-Key": "request-001"}, claims={
                 "cognito:groups": ["Staff"],
@@ -169,6 +174,8 @@ class TransactionHandlerTests(unittest.TestCase):
         transaction_put = calls[0]["TransactItems"][1]["Put"]["Item"]
         self.assertEqual(data["performedBy"], "staff.tran")
         self.assertNotEqual(data["transactionId"], "client-id")
+        self.assertEqual(data["type"], "EXPORT")
+        self.assertEqual(data["quantity"], 3)
         self.assertEqual(transaction_put["productName"]["S"], "Paper")
         self.assertEqual(
             calls[0]["TransactItems"][0]["Update"]["ExpressionAttributeValues"][":delta"]["N"],
@@ -176,22 +183,109 @@ class TransactionHandlerTests(unittest.TestCase):
         )
 
     @patch.dict(os.environ, {
-        "TRANSACTIONS_TABLE": "transactions",
-        "PRODUCTS_TABLE": "products",
-        "SUPPLIERS_TABLE": "suppliers",
+        "TABLE_TRANSACTIONS": "transactions",
+        "TABLE_PRODUCTS": "products",
+        "TABLE_SUPPLIERS": "suppliers",
     })
     def test_missing_idempotency_key_is_rejected(self):
         with patch("src.transactions.dynamodb", FakeDynamo({})):
             from src.transactions import handler
 
             result = handler(event("POST", {
-                "type": "IN",
+                "type": "IMPORT",
                 "productId": "prod-001",
-                "amount": 1,
-                "reason": "replenishment",
+                "quantity": 1,
             }, headers={}, claims={"cognito:groups": ["Staff"], "sub": "user-sub-001"}))
         self.assertEqual(result["statusCode"], 400)
         self.assertEqual(response_body(result)["code"], "IDEMPOTENCY_KEY_REQUIRED")
+
+
+class CloudFeatureHandlerTests(unittest.TestCase):
+    @patch.dict(os.environ, {
+        "TABLE_PRODUCTS": "products",
+        "TABLE_SUPPLIERS": "suppliers",
+        "TABLE_TRANSACTIONS": "transactions",
+    })
+    def test_dashboard_aggregates_cloud_schema_fields(self):
+        today = datetime.now(timezone.utc).isoformat()
+        tables = {
+            "products": FakeTable({
+                ("p1",): {"productId": "p1", "stockQuantity": 4, "price": 25, "minThreshold": 5},
+                ("p2",): {"productId": "p2", "stockQuantity": 0, "price": 10, "minThreshold": 0},
+            }),
+            "suppliers": FakeTable({("s1",): {"supplierId": "s1"}}),
+            "transactions": FakeTable({
+                ("t1",): {"transactionId": "t1", "createdAt": today, "type": "IMPORT", "quantity": 8},
+                ("t2",): {"transactionId": "t2", "createdAt": today, "type": "EXPORT", "quantity": 3},
+            }),
+        }
+        with patch("src.dashboard.dynamodb", FakeDynamo(tables)):
+            from src.dashboard import handler
+
+            request = event("GET")
+            request["path"] = "/dashboard"
+            result = handler(request)
+        self.assertEqual(response_body(result)["data"], {
+            "totalProducts": 2,
+            "totalQuantity": 4,
+            "totalValue": 100,
+            "lowStockCount": 1,
+            "totalSuppliers": 1,
+            "todayIn": 8,
+            "todayOut": 3,
+            "todayTransactions": 2,
+        })
+
+    def test_users_management_requires_admin_before_cognito_access(self):
+        request = event("GET", claims={"cognito:groups": ["Staff"]})
+        request["path"] = "/users"
+        with patch("src.users._client") as cognito:
+            from src.users import handler
+
+            result = handler(request)
+        self.assertEqual(result["statusCode"], 403)
+        cognito.assert_not_called()
+
+    @patch.dict(os.environ, {"BUCKET_NAME": "test-assets", "AWS_REGION": "ap-southeast-1"})
+    def test_product_image_upload_is_scoped_and_size_limited(self):
+        class FakeS3:
+            def generate_presigned_post(self, **kwargs):
+                self.request = kwargs
+                return {"url": "https://s3.example.test", "fields": {"key": kwargs["Key"]}}
+
+        s3 = FakeS3()
+        request = event("POST", {"fileName": "photo.png", "contentType": "image/png"})
+        request["path"] = "/products/upload-url"
+        with patch("src.uploads._client", return_value=s3):
+            from src.uploads import product_image_upload_url
+
+            result = product_image_upload_url(request)
+        data = response_body(result)["data"]
+        self.assertTrue(data["objectKey"].startswith("products/"))
+        self.assertEqual(s3.request["ExpiresIn"], 300)
+        self.assertIn(["content-length-range", 1, 5 * 1024 * 1024], s3.request["Conditions"])
+
+    def test_invoice_upload_rejects_unsupported_mime_before_s3_call(self):
+        request = event("POST", {"fileName": "document.webp", "contentType": "image/webp"})
+        request["path"] = "/transactions/invoice-upload-url"
+        with patch("src.uploads._client") as s3:
+            from src.uploads import invoice_upload_url
+
+            result = invoice_upload_url(request)
+        self.assertEqual(result["statusCode"], 400)
+        self.assertEqual(response_body(result)["code"], "INVALID_CONTENT_TYPE")
+        s3.assert_not_called()
+
+    @patch.dict(os.environ, {"LOG_GROUPS": "/aws/lambda/app"})
+    def test_logs_api_requires_admin(self):
+        request = event("GET", claims={"cognito:groups": ["Staff"]})
+        request["path"] = "/logs"
+        with patch("src.logs._client") as logs:
+            from src.logs import handler
+
+            result = handler(request)
+        self.assertEqual(result["statusCode"], 403)
+        logs.assert_not_called()
 
 
 class LocalApiTests(unittest.TestCase):
@@ -200,6 +294,13 @@ class LocalApiTests(unittest.TestCase):
         self.assertIsNone(resolve_route("POST", "/transactions/txn-1"))
         environment = {}
         self.assertEqual(configure_local_environment(environment)["STAGE"], "dev")
+        self.assertEqual(environment["TABLE_PRODUCTS"], "cloudstock-dev-products")
+        self.assertEqual(resolve_route("GET", "/dashboard"), ("dashboard", {}))
+        self.assertEqual(resolve_route("POST", "/products/upload-url"), ("products", {}))
+        self.assertEqual(
+            resolve_route("GET", "/transactions/txn-1/invoice-url"),
+            ("transactions", {"transactionId": "txn-1"}),
+        )
         with self.assertRaises(ValueError):
             configure_local_environment({"DYNAMODB_ENDPOINT": "https://example.com:8000"})
 

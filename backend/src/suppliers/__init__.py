@@ -1,16 +1,15 @@
-import os
 import re
 
 from boto3.dynamodb.conditions import Attr
 
-from ..common.dynamodb import dynamodb, is_conditional_failure, scan_all, scan_page
+from ..common.dynamodb import dynamodb, is_conditional_failure, scan_all, scan_page, table_name
 from ..common.http import ApiError, parse_body, require_any_group, success, with_error_handling
 
 SUPPLIER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _table(name):
-    return dynamodb.Table(os.environ[name])
+    return dynamodb.Table(table_name(name))
 
 
 def _optional_string(value, field, max_length):
@@ -39,7 +38,7 @@ def _validate_supplier(input_data, existing, supplier_id):
 @with_error_handling
 def handler(event, context=None):
     require_any_group(event, ["Admin", "Staff"])
-    suppliers = _table("SUPPLIERS_TABLE")
+    suppliers = _table("TABLE_SUPPLIERS")
     method = event.get("httpMethod")
     supplier_id = (event.get("pathParameters") or {}).get("supplierId")
     if method == "GET" and not supplier_id:
@@ -82,9 +81,9 @@ def handler(event, context=None):
     if method == "DELETE" and supplier_id:
         if not suppliers.get_item(Key={"supplierId": supplier_id}).get("Item"):
             raise ApiError(404, "SUPPLIER_NOT_FOUND", "Không tìm thấy nhà cung cấp.")
-        if scan_all(_table("PRODUCTS_TABLE"), FilterExpression=Attr("supplierId").eq(supplier_id), ProjectionExpression="productId"):
+        if scan_all(_table("TABLE_PRODUCTS"), FilterExpression=Attr("supplierId").eq(supplier_id), ProjectionExpression="productId"):
             raise ApiError(409, "SUPPLIER_IN_USE", "Không thể xóa nhà cung cấp đang được liên kết với sản phẩm.")
-        if scan_all(_table("TRANSACTIONS_TABLE"), FilterExpression=Attr("supplierId").eq(supplier_id), ProjectionExpression="transactionId"):
+        if scan_all(_table("TABLE_TRANSACTIONS"), FilterExpression=Attr("supplierId").eq(supplier_id), ProjectionExpression="transactionId"):
             raise ApiError(409, "SUPPLIER_HAS_HISTORY", "Không thể xóa nhà cung cấp đã có lịch sử giao dịch.")
         try:
             suppliers.delete_item(Key={"supplierId": supplier_id}, ConditionExpression=Attr("supplierId").exists())

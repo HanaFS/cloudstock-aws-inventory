@@ -43,4 +43,5 @@ build/
 .aws-sam/
 samconfig.toml
 backend/test/events/*.local.json
+cautruccloudnhom4.docx
 
