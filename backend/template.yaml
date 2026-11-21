@@ -260,6 +260,7 @@ Resources:
           TRANSACTIONS_TABLE: !Ref TransactionsTable
           PRODUCTS_TABLE: !Ref ProductsTable
           SUPPLIERS_TABLE: !Ref SuppliersTable
+          INVOICES_BUCKET: !Ref ProductImagesBucket
       Policies:
         - Statement:
             - Effect: Allow
@@ -274,12 +275,21 @@ Resources:
               Resource: !GetAtt TransactionsTable.Arn
             - Effect: Allow
               Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt TransactionsTable.Arn
+            - Effect: Allow
+              Action:
                 - dynamodb:Query
               Resource: !Sub "${TransactionsTable.Arn}/index/ByTimestamp"
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
               Resource: !GetAtt SuppliersTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub "${ProductImagesBucket.Arn}/invoices/*"
       Events:
         ListTransactions:
           Type: Api
@@ -298,6 +308,18 @@ Resources:
           Properties:
             RestApiId: !Ref CloudStockApi
             Path: /transactions/{transactionId}
+            Method: GET
+        CreateInvoiceUpload:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /transactions/invoice-uploads
+            Method: POST
+        ReadTransactionInvoice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /transactions/{transactionId}/invoice
             Method: GET
 
   ProductImagesFunction:
@@ -441,6 +463,49 @@ Resources:
             RestApiId: !Ref CloudStockApi
             Path: /users/{username}
             Method: DELETE
+
+  LogsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.logs.handler
+      Environment:
+        Variables:
+          CLOUDSTOCK_LOG_GROUPS: !Join
+            - ","
+            - - !Sub "/aws/lambda/${HealthFunction}"
+              - !Sub "/aws/lambda/${ProductsFunction}"
+              - !Sub "/aws/lambda/${SuppliersFunction}"
+              - !Sub "/aws/lambda/${TransactionsFunction}"
+              - !Sub "/aws/lambda/${ProductImagesFunction}"
+              - !Sub "/aws/lambda/${DashboardFunction}"
+              - !Sub "/aws/lambda/${UsersFunction}"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - logs:FilterLogEvents
+              Resource:
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${HealthFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProductsFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${SuppliersFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${TransactionsFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProductImagesFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${DashboardFunction}:*"
+                - !Sub "${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${UsersFunction}:*"
+      Events:
+        TransactionLogs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /transactions/logs
+            Method: GET
+        LogsCompatibility:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /logs
+            Method: GET
 
   ProductImagesBucket:
     Type: AWS::S3::Bucket

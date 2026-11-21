@@ -9,10 +9,15 @@ MAX_BODY_BYTES = 1024 * 1024
 LOCAL_FRONTEND_ORIGIN = "http://localhost:8080"
 _COLLECTION = re.compile(r"^/(products|suppliers|transactions)$")
 _ITEM = re.compile(r"^/(products|suppliers|transactions)/([^/]+)$")
+_PRODUCT_IMAGE_UPLOAD = re.compile(r"^/products/([^/]+)/image-uploads$")
+_PRODUCT_IMAGE_ATTACH = re.compile(r"^/products/([^/]+)/image-uploads/([0-9a-f]{32})/complete$")
+_INVOICE_UPLOAD = re.compile(r"^/transactions/invoice-uploads$")
+_TRANSACTION_INVOICE = re.compile(r"^/transactions/([^/]+)/invoice$")
 _DASHBOARD = re.compile(r"^/dashboard(?:/stats)?$")
 _USERS = re.compile(r"^/users$")
 _USER_ITEM = re.compile(r"^/users/([^/]+)$")
 _USER_ROLE = re.compile(r"^/users/([^/]+)/role$")
+_LOGS = {"/transactions/logs", "/logs"}
 
 
 def resolve_route(method, pathname):
@@ -20,6 +25,8 @@ def resolve_route(method, pathname):
         return "health", {}
     if method == "GET" and _DASHBOARD.fullmatch(pathname):
         return "dashboard", {}
+    if method == "GET" and pathname in _LOGS:
+        return "logs", {}
     if method in ("GET", "POST") and _USERS.fullmatch(pathname):
         return "users", {}
     if method == "PUT":
@@ -37,6 +44,26 @@ def resolve_route(method, pathname):
         except (UnicodeDecodeError, ValueError):
             return None
         return "users", {"username": username}
+    if method == "POST" and _INVOICE_UPLOAD.fullmatch(pathname):
+        return "transactions", {}
+    if method == "GET":
+        invoice = _TRANSACTION_INVOICE.fullmatch(pathname)
+        if invoice:
+            try:
+                transaction_id = unquote(invoice.group(1))
+            except (UnicodeDecodeError, ValueError):
+                return None
+            return "transactions", {"transactionId": transaction_id}
+    if method == "POST":
+        image_attach = _PRODUCT_IMAGE_ATTACH.fullmatch(pathname)
+        if image_attach:
+            return "product_images", {
+                "productId": unquote(image_attach.group(1)),
+                "reservationId": image_attach.group(2),
+            }
+        image_upload = _PRODUCT_IMAGE_UPLOAD.fullmatch(pathname)
+        if image_upload:
+            return "product_images", {"productId": unquote(image_upload.group(1))}
     collection = _COLLECTION.fullmatch(pathname)
     if collection:
         resource = collection.group(1)
@@ -92,6 +119,8 @@ def configure_local_environment(env=None):
     env.setdefault("PRODUCTS_TABLE", "cloudstock-dev-products")
     env.setdefault("SUPPLIERS_TABLE", "cloudstock-dev-suppliers")
     env.setdefault("TRANSACTIONS_TABLE", "cloudstock-dev-transactions")
+    env.setdefault("PRODUCT_IMAGES_BUCKET", "cloudstock-dev-product-images-local")
+    env.setdefault("INVOICES_BUCKET", env["PRODUCT_IMAGES_BUCKET"])
     return env
 
 
@@ -102,20 +131,24 @@ class LocalApiServer(ThreadingHTTPServer):
 
 def create_local_api_server(handlers=None, frontend_origin=LOCAL_FRONTEND_ORIGIN):
     if handlers is None:
-        from src.dashboard import handler as dashboard_handler
-        from src.users import handler as users_handler
         from src.health import handler as health_handler
+        from src.dashboard import handler as dashboard_handler
+        from src.logs import handler as logs_handler
         from src.products import handler as products_handler
+        from src.product_images import handler as product_images_handler
         from src.suppliers import handler as suppliers_handler
         from src.transactions import handler as transactions_handler
+        from src.users import handler as users_handler
 
         handlers = {
-            "dashboard": dashboard_handler,
-            "users": users_handler,
             "health": health_handler,
+            "dashboard": dashboard_handler,
+            "logs": logs_handler,
             "products": products_handler,
+            "product_images": product_images_handler,
             "suppliers": suppliers_handler,
             "transactions": transactions_handler,
+            "users": users_handler,
         }
 
     class RequestHandler(BaseHTTPRequestHandler):
