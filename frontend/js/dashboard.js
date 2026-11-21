@@ -36,7 +36,7 @@ const DashboardModule = (() => {
 
      
     const totalValue = products.reduce(
-      (sum, p) => sum + (p.stockQuantity || 0) * (p.price || 0),
+      (sum, p) => sum + (p.quantity || 0) * (p.price || 0),
       0
     );
 
@@ -48,18 +48,18 @@ const DashboardModule = (() => {
     const todayPrefix = `${todayYear}-${todayMonth}-${todayDay}`;
 
     const todayTxns = transactions.filter((t) =>
-      t.createdAt ? t.createdAt.startsWith(todayPrefix) : false
+      t.timestamp ? t.timestamp.startsWith(todayPrefix) : false
     );
     const todayIn = todayTxns
-      .filter((t) => t.type === "IMPORT")
-      .reduce((sum, t) => sum + (t.quantity || 0), 0);
+      .filter((t) => t.type === "IN")
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
     const todayOut = todayTxns
-      .filter((t) => t.type === "EXPORT")
-      .reduce((sum, t) => sum + (t.quantity || 0), 0);
+      .filter((t) => t.type === "OUT")
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
 
      
     const lowStockProducts = products.filter(
-      (p) => (p.stockQuantity || 0) < (p.minThreshold || 0)
+      (p) => (p.quantity || 0) < (p.minThreshold || 0)
     );
 
      
@@ -108,13 +108,13 @@ const DashboardModule = (() => {
     });
 
     transactions.forEach((t) => {
-      if (!t.createdAt) return;
-      const key = t.createdAt.slice(0, 10);
+      if (!t.timestamp) return;
+      const key = t.timestamp.slice(0, 10);
       if (key in inDataByDay) {
-        if (t.type === "IMPORT") {
-          inDataByDay[key] += t.quantity || 0;
-        } else if (t.type === "EXPORT") {
-          outDataByDay[key] += t.quantity || 0;
+        if (t.type === "IN") {
+          inDataByDay[key] += t.amount || 0;
+        } else if (t.type === "OUT") {
+          outDataByDay[key] += t.amount || 0;
         }
       }
     });
@@ -135,7 +135,7 @@ const DashboardModule = (() => {
         labels: days,
         datasets: [
           {
-            label: "Nhap kho (IMPORT)",
+            label: "Nhap kho (IN)",
             data: inSeries,
             backgroundColor: "#2563eb",  
             borderColor: "#1d4ed8",
@@ -145,7 +145,7 @@ const DashboardModule = (() => {
             categoryPercentage: 0.6,
           },
           {
-            label: "Xuat kho (EXPORT)",
+            label: "Xuat kho (OUT)",
             data: outSeries,
             backgroundColor: "#d97706",  
             borderColor: "#b45309",
@@ -215,7 +215,7 @@ const DashboardModule = (() => {
     const categoryTotals = {};
     products.forEach((p) => {
       const cat = p.category || "Chua phan loai";
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + (p.stockQuantity || 0);
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + (p.quantity || 0);
     });
 
     const labels = Object.keys(categoryTotals);
@@ -305,13 +305,13 @@ const DashboardModule = (() => {
 
      
     const lowStockList = products.filter(
-      (p) => (p.stockQuantity || 0) < (p.minThreshold || 0)
+      (p) => (p.quantity || 0) < (p.minThreshold || 0)
     );
 
      
     lowStockList.sort((a, b) => {
-      const deficitA = (a.minThreshold || 0) - (a.stockQuantity || 0);
-      const deficitB = (b.minThreshold || 0) - (b.stockQuantity || 0);
+      const deficitA = (a.minThreshold || 0) - (a.quantity || 0);
+      const deficitB = (b.minThreshold || 0) - (b.quantity || 0);
       return deficitB - deficitA;
     });
 
@@ -334,7 +334,7 @@ const DashboardModule = (() => {
 
     tbody.innerHTML = lowStockList
       .map((p) => {
-        const currentQty = p.stockQuantity || 0;
+        const currentQty = p.quantity || 0;
         const minQty = p.minThreshold || 0;
         const deficit = minQty - currentQty;  
 

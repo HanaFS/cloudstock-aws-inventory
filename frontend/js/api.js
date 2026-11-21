@@ -98,24 +98,6 @@ const ApiService = (() => {
     return { success: true, data };
   }
 
-  async function _uploadFile(uploadPath, file) {
-    if (!(file instanceof File)) throw new Error("Tệp tải lên không hợp lệ.");
-    const response = await _fetchAPI("POST", uploadPath, {
-      fileName: file.name,
-      contentType: file.type,
-    });
-    const upload = response?.data;
-    if (!upload?.url || !upload?.fields || !upload?.objectKey) {
-      throw new Error("API không trả về thông tin tải tệp hợp lệ.");
-    }
-    const formData = new FormData();
-    Object.entries(upload.fields).forEach(([name, value]) => formData.append(name, value));
-    formData.append("file", file);
-    const result = await fetch(upload.url, { method: "POST", body: formData });
-    if (!result.ok) throw new Error(`Tải tệp lên S3 thất bại (${result.status}).`);
-    return upload;
-  }
-
 
   const ID_FIELD_MAP = {
     users: "id",
@@ -168,31 +150,23 @@ const ApiService = (() => {
 
     async getById(productId) {
       if (_usesMockData("products")) return _mockGetById("products", productId);
-      return _fetchAPI("GET", `/products/${encodeURIComponent(productId)}`);
+      return _fetchAPI("GET", `/products/${productId}`);
     },
 
     async create(product) {
       if (_usesMockData("products")) return _mockCreate("products", product);
-      const payload = { ...product };
-      let requestBody = payload;
-      if (payload.imageFile) {
-        const upload = await _uploadFile("/products/upload-url", payload.imageFile);
-        requestBody = { ...payload, imageUrl: upload.imageUrl };
+      if (product.imageUrl) {
+        throw new Error("Tải ảnh sản phẩm lên backend chưa được hỗ trợ; hãy bỏ ảnh đính kèm.");
       }
-      delete requestBody.imageFile;
-      return _fetchAPI("POST", "/products", requestBody);
+      return _fetchAPI("POST", "/products", product);
     },
 
     async update(productId, updates) {
       if (_usesMockData("products")) return _mockUpdate("products", productId, updates);
-      const payload = { ...updates };
-      let requestBody = payload;
-      if (payload.imageFile) {
-        const upload = await _uploadFile("/products/upload-url", payload.imageFile);
-        requestBody = { ...payload, imageUrl: upload.imageUrl };
+      if (updates.imageUrl) {
+        throw new Error("Tải ảnh sản phẩm lên backend chưa được hỗ trợ; hãy bỏ ảnh đính kèm.");
       }
-      delete requestBody.imageFile;
-      return _fetchAPI("PUT", `/products/${encodeURIComponent(productId)}`, requestBody);
+      return _fetchAPI("PUT", `/products/${productId}`, updates);
     },
 
     async delete(productId) {
@@ -204,7 +178,7 @@ const ApiService = (() => {
       if (_usesMockData("products")) {
         await _delay();
         const all = MockDataStore.getAll("products");
-        const lowStock = all.filter((p) => p.stockQuantity < p.minThreshold);
+        const lowStock = all.filter((p) => p.quantity < p.minThreshold);
         return _wrapResponse(lowStock);
       }
       return _fetchAllPages("/products?filter=low-stock");
@@ -247,7 +221,7 @@ const ApiService = (() => {
     async getById(transactionId) {
       if (_usesMockData("transactions"))
         return _mockGetById("transactions", transactionId);
-      return _fetchAPI("GET", `/transactions/${encodeURIComponent(transactionId)}`);
+      return _fetchAPI("GET", `/transactions/${transactionId}`);
     },
 
     async create(transaction) {
@@ -262,20 +236,19 @@ const ApiService = (() => {
         if (!product) throw new Error("San pham khong ton tai");
 
         const delta =
-          transaction.type === "IMPORT"
-            ? transaction.quantity
-            : -transaction.quantity;
-        const newQuantity = product.stockQuantity + delta;
+          transaction.type === "IN"
+            ? transaction.amount
+            : -transaction.amount;
+        const newQuantity = product.quantity + delta;
 
         if (newQuantity < 0) {
           throw new Error(
-            `Khong du ton kho. Hien co: ${product.stockQuantity}, Yeu cau xuat: ${transaction.quantity}`
+            `Khong du ton kho. Hien co: ${product.quantity}, Yeu cau xuat: ${transaction.amount}`
           );
         }
 
         MockDataStore.update("products", "productId", transaction.productId, {
-          stockQuantity: newQuantity,
-          status: newQuantity > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+          quantity: newQuantity,
           updatedAt: new Date().toISOString(),
         });
 
@@ -286,73 +259,54 @@ const ApiService = (() => {
       if (!idempotencyKey) {
         throw new Error("Giao dịch cần có Idempotency-Key để gửi an toàn.");
       }
-      const payload = {
+      if (transaction.invoiceUrl) {
+        throw new Error("Tải chứng từ lên backend chưa được hỗ trợ; hãy bỏ chứng từ đính kèm.");
+      }
+      const requestBody = {
         type: transaction.type,
         productId: transaction.productId,
-        quantity: transaction.quantity,
-        ...(transaction.type === "IMPORT" && transaction.supplierId
-          ? { supplierId: transaction.supplierId }
-          : {}),
-        ...(transaction.type === "IMPORT" && transaction.invoiceUrl
-          ? { invoiceUrl: transaction.invoiceUrl }
-          : {}),
-        ...(transaction.type === "EXPORT" ? { reason: transaction.reason } : {}),
+        amount: transaction.amount,
+        supplierId: transaction.supplierId || null,
+        reason: transaction.reason,
       };
-      let requestBody = payload;
-      if (transaction.invoiceFile) {
-        const upload = await _uploadFile("/transactions/invoice-upload-url", transaction.invoiceFile);
-        requestBody = { ...payload, invoiceUrl: upload.invoiceUrl };
-      }
+      if (transaction.invoiceKey) requestBody.invoiceKey = transaction.invoiceKey;
       return _fetchAPI("POST", "/transactions", requestBody, {
         "Idempotency-Key": String(idempotencyKey),
       });
-    },
-
-    async getInvoiceUrl(transactionId) {
-      if (_usesMockData("transactions")) {
-        const response = await _mockGetById("transactions", transactionId);
-        return { success: true, data: { url: response.data.invoiceUrl } };
-      }
-      return _fetchAPI("GET", `/transactions/${encodeURIComponent(transactionId)}/invoice-url`);
     },
   };
 
   const Users = {
     async getAll() {
       if (_usesMockData("users")) return _mockGetAll("users");
-      return _fetchAllPages("/users");
+      return _fetchAPI("GET", "/users");
     },
 
     async getById(userId) {
       if (_usesMockData("users")) return _mockGetById("users", userId);
-      return _fetchAPI("GET", `/users/${encodeURIComponent(userId)}`);
+      return _fetchAPI("GET", `/users/${userId}`);
     },
 
     async create(user) {
       if (_usesMockData("users")) return _mockCreate("users", user);
-      return _fetchAPI("POST", "/users", {
-        username: user.username,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-      });
+      return _fetchAPI("POST", "/users", user);
     },
 
     async update(userId, updates) {
       if (_usesMockData("users")) return _mockUpdate("users", userId, updates);
-      return _fetchAPI("PUT", `/users/${encodeURIComponent(userId)}`, updates);
+      return _fetchAPI("PUT", `/users/${userId}`, updates);
     },
 
     async delete(userId) {
       if (_usesMockData("users")) return _mockDelete("users", userId);
-      return _fetchAPI("DELETE", `/users/${encodeURIComponent(userId)}`);
+      return _fetchAPI("DELETE", `/users/${userId}`);
     },
   };
 
   const SystemLogs = {
     async getAll() {
       if (_usesMockData("systemLogs")) return _mockGetAll("systemLogs");
-      return _fetchAllPages("/logs");
+      return _fetchAPI("GET", "/logs");
     },
   };
 
@@ -380,26 +334,26 @@ const ApiService = (() => {
         }
 
         const totalProducts = products.length;
-        const totalQuantity = products.reduce((sum, p) => sum + p.stockQuantity, 0);
+        const totalQuantity = products.reduce((sum, p) => sum + p.quantity, 0);
         const totalValue = products.reduce(
-          (sum, p) => sum + p.stockQuantity * p.price,
+          (sum, p) => sum + p.quantity * p.price,
           0
         );
         const lowStockCount = products.filter(
-          (p) => p.stockQuantity < p.minThreshold
+          (p) => p.quantity < p.minThreshold
         ).length;
         const totalSuppliers = suppliers.length;
 
         const todayStr = new Date().toISOString().slice(0, 10);
         const todayTransactions = transactions.filter((t) =>
-          t.createdAt.startsWith(todayStr)
+          t.timestamp.startsWith(todayStr)
         );
         const todayIn = todayTransactions
-          .filter((t) => t.type === "IMPORT")
-          .reduce((sum, t) => sum + t.quantity, 0);
+          .filter((t) => t.type === "IN")
+          .reduce((sum, t) => sum + t.amount, 0);
         const todayOut = todayTransactions
-          .filter((t) => t.type === "EXPORT")
-          .reduce((sum, t) => sum + t.quantity, 0);
+          .filter((t) => t.type === "OUT")
+          .reduce((sum, t) => sum + t.amount, 0);
 
         return _wrapResponse({
           totalProducts,
@@ -412,7 +366,7 @@ const ApiService = (() => {
           todayTransactions: todayTransactions.length,
         });
       }
-      return _fetchAPI("GET", "/dashboard");
+      return _fetchAPI("GET", "/dashboard/stats");
     },
   };
 
@@ -641,7 +595,7 @@ const ApiService = (() => {
         const user = users.find((u) => u.username === username);
 
         if (!user) throw new Error("Tai khoan khong ton tai");
-        if (user.status === "DISABLED") throw new Error("Tai khoan da bi khoa");
+        if (user.status === "LOCKED") throw new Error("Tai khoan da bi khoa");
 
         const mockToken = btoa(
           JSON.stringify({ sub: user.id, username: user.username })

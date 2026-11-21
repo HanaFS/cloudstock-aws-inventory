@@ -11,7 +11,6 @@ const ProductsModule = (() => {
   let editingProductId = null;
   let deletingProductId = null;
   let uploadedImageBase64 = "";
-  let uploadedImageFile = null;
 
    async function loadProducts() {
     try {
@@ -47,9 +46,9 @@ const ProductsModule = (() => {
       // 3. Lọc Trạng thái tồn kho
       let stockMatch = true;
       if (filterStockStatus === "LOW") {
-        stockMatch = (p.stockQuantity || 0) < (p.minThreshold || 0);
+        stockMatch = (p.quantity || 0) < (p.minThreshold || 0);
       } else if (filterStockStatus === "SAFE") {
-        stockMatch = (p.stockQuantity || 0) >= (p.minThreshold || 0);
+        stockMatch = (p.quantity || 0) >= (p.minThreshold || 0);
       }
 
       return searchMatch && catMatch && stockMatch;
@@ -92,7 +91,7 @@ const ProductsModule = (() => {
 
     tbody.innerHTML = pagedItems
       .map((p) => {
-        const isLow = (p.stockQuantity || 0) < (p.minThreshold || 0);
+        const isLow = (p.quantity || 0) < (p.minThreshold || 0);
         const stockBadge = isLow
           ? `<span class="badge badge-danger">DUOI NGUONG</span>`
           : `<span class="badge badge-success">AN TOAN</span>`;
@@ -108,7 +107,7 @@ const ProductsModule = (() => {
             <td><span class="badge badge-neutral">${p.category}</span></td>
             <td class="col-r font-mono">${formatCurrency(p.price)}</td>
             <td class="col-r ${isLow ? "text-danger" : ""}">
-              <strong>${formatNumber(p.stockQuantity)}</strong>
+              <strong>${formatNumber(p.quantity)}</strong>
             </td>
             <td class="col-r text-muted">${formatNumber(p.minThreshold)}</td>
             <td>${stockBadge}</td>
@@ -217,7 +216,6 @@ const ProductsModule = (() => {
   function openCreateModal() {
     editingProductId = null;
     uploadedImageBase64 = "";
-    uploadedImageFile = null;
 
     const form = document.getElementById("form-product");
     const title = document.getElementById("modal-product-title");
@@ -243,14 +241,13 @@ const ProductsModule = (() => {
 
     editingProductId = productId;
     uploadedImageBase64 = prod.imageUrl || "";
-    uploadedImageFile = null;
 
     const title = document.getElementById("modal-product-title");
     const idInput = document.getElementById("prod-form-id");
     const nameInput = document.getElementById("prod-form-name");
     const catInput = document.getElementById("prod-form-category");
     const priceInput = document.getElementById("prod-form-price");
-    const stockQuantityInput = document.getElementById("prod-form-stock-quantity");
+    const qtyInput = document.getElementById("prod-form-quantity");
     const minInput = document.getElementById("prod-form-min");
     const supSelect = document.getElementById("prod-form-supplier");
     const dropzoneText = document.getElementById("prod-dropzone-text");
@@ -263,7 +260,7 @@ const ProductsModule = (() => {
     if (nameInput) nameInput.value = prod.name || "";
     if (catInput) catInput.value = prod.category || "";
     if (priceInput) priceInput.value = prod.price || 0;
-    if (stockQuantityInput) stockQuantityInput.value = prod.stockQuantity || 0;
+    if (qtyInput) qtyInput.value = prod.quantity || 0;
     if (minInput) minInput.value = prod.minThreshold || 0;
     if (supSelect) supSelect.value = prod.supplierId || "";
     if (dropzoneText) {
@@ -281,7 +278,6 @@ const ProductsModule = (() => {
     if (modal) modal.classList.remove("visible");
     editingProductId = null;
     uploadedImageBase64 = "";
-    uploadedImageFile = null;
   }
 
   async function handleFormSubmit(e) {
@@ -291,7 +287,7 @@ const ProductsModule = (() => {
     const name = document.getElementById("prod-form-name")?.value.trim();
     const category = document.getElementById("prod-form-category")?.value.trim();
     const price = Number(document.getElementById("prod-form-price")?.value) || 0;
-    const stockQuantity = Number(document.getElementById("prod-form-stock-quantity")?.value) || 0;
+    const quantity = Number(document.getElementById("prod-form-quantity")?.value) || 0;
     const minThreshold = Number(document.getElementById("prod-form-min")?.value) || 0;
     const supplierId = document.getElementById("prod-form-supplier")?.value || null;
 
@@ -307,11 +303,10 @@ const ProductsModule = (() => {
       name,
       category,
       price,
-      stockQuantity,
+      quantity,
       minThreshold,
       supplierId,
       imageUrl: uploadedImageBase64,
-      imageFile: uploadedImageFile,
       updatedAt: new Date().toISOString(),
     };
 
@@ -424,20 +419,13 @@ const ProductsModule = (() => {
     });
 
     function handleFileSelect(file) {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      if (!file.type.startsWith("image/")) {
         if (window.AuthModule) {
-          AuthModule.showToast("Vui lòng chọn ảnh JPEG, PNG hoặc WebP", "warning");
-        }
-        return;
-      }
-      if (file.size < 1 || file.size > 5 * 1024 * 1024) {
-        if (window.AuthModule) {
-          AuthModule.showToast("Ảnh phải có dung lượng tối đa 5 MB", "warning");
+          AuthModule.showToast("Vui long chi chon tep hinh anh", "warning");
         }
         return;
       }
 
-      uploadedImageFile = file;
       const reader = new FileReader();
       reader.onload = (evt) => {
         uploadedImageBase64 = evt.target.result;
