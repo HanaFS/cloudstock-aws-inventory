@@ -1,20 +1,27 @@
-// File: frontend/js/config.js
+const DEPLOY_OUTPUTS = {
+  API_BASE_URL: "https://1mj1230a5d.execute-api.ap-southeast-1.amazonaws.com/dev",                 
+  USER_POOL_ID: "ap-southeast-1_yvqtdZ5Tb",                         
+  USER_POOL_CLIENT_ID: "3a6f7hfuflr5rhi7bqhnqo3gc7",    
+  COGNITO_DOMAIN: "https://cloudstock-nhom4-202600.auth.ap-southeast-1.amazoncognito.com",    
+  ASSETS_BUCKET: "cloudstock-assets-dev-925268418306-ap-southeast-1"   
+};
+
 const AWS_CONFIG = {
   REGION: 'ap-southeast-1',
-  API_BASE_URL: 'https://8od8y28vg9.execute-api.ap-southeast-1.amazonaws.com',
+  API_BASE_URL: DEPLOY_OUTPUTS.API_BASE_URL,
   COGNITO: {
-    USER_POOL_ID: 'ap-southeast-1_OnVjalo1T',
-    CLIENT_ID: '7qmk3hnllp292nguotfht8m7uh',
+    USER_POOL_ID: DEPLOY_OUTPUTS.USER_POOL_ID,
+    CLIENT_ID: DEPLOY_OUTPUTS.USER_POOL_CLIENT_ID,
     GROUPS: {
       ADMIN: 'Admin',
       STAFF: 'Staff'
     }
   },
   S3: {
-    BUCKET_NAME: 'qlkho-assets-nhom4-2026',
+    BUCKET_NAME: DEPLOY_OUTPUTS.ASSETS_BUCKET,
     PUBLIC_PRODUCT_PREFIX: 'products/',
     PRIVATE_INVOICE_PREFIX: 'invoices/',
-    PUBLIC_BASE_URL: 'https://qlkho-assets-nhom4-2026.s3.ap-southeast-1.amazonaws.com'
+    PUBLIC_BASE_URL: `https://${DEPLOY_OUTPUTS.ASSETS_BUCKET}.s3.ap-southeast-1.amazonaws.com`
   },
   ENUMS: {
     PRODUCT_STATUS: { IN_STOCK: 'IN_STOCK', OUT_OF_STOCK: 'OUT_OF_STOCK' },
@@ -37,18 +44,18 @@ async function apiRequest(path, options = {}) {
 }
 
 const CONFIG = Object.freeze({
-  USE_MOCK_DATA: true, 
-  USE_MOCK_AUTH: true,  
-  USE_LOCAL_API: true,  
-  USE_LOCAL_API_AUTH: true,
+  USE_MOCK_DATA: false,
+  USE_MOCK_AUTH: false,
+  USE_LOCAL_API: false,
+  USE_LOCAL_API_AUTH: false,
 
-  API_BASE_URL: "http://localhost:3001",
+  API_BASE_URL: DEPLOY_OUTPUTS.API_BASE_URL,
 
   COGNITO_USER_POOL_ID: AWS_CONFIG.COGNITO.USER_POOL_ID,
   COGNITO_CLIENT_ID: AWS_CONFIG.COGNITO.CLIENT_ID,
-  COGNITO_HOSTED_UI_DOMAIN: "",
-  COGNITO_REDIRECT_URI: (typeof window !== "undefined" ? window.location.origin : "http://localhost:8080") + "/login.html",
-  COGNITO_LOGOUT_URI: (typeof window !== "undefined" ? window.location.origin : "http://localhost:8080") + "/login.html",
+  COGNITO_HOSTED_UI_DOMAIN: DEPLOY_OUTPUTS.COGNITO_DOMAIN,
+  COGNITO_REDIRECT_URI: (typeof window !== "undefined" ? window.location.origin : "https://d7omav63h53i1.cloudfront.net") + "/login.html",
+  COGNITO_LOGOUT_URI: (typeof window !== "undefined" ? window.location.origin : "https://d7omav63h53i1.cloudfront.net") + "/login.html",
   COGNITO_SCOPES: ["openid", "email", "profile"],
 
   APP_NAME: "CloudStock",
