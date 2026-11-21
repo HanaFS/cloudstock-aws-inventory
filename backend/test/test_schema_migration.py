@@ -61,7 +61,7 @@ class TransactionMigrationPlanTests(unittest.TestCase):
             "amount": 3,
             "supplierId": "s-1",
             "gsi1pk": "TRANSACTION",
-            "gsi1sk": "2026-11-21T10:00:00Z#txn-1",
+            "gsi1sk": "legacy-sort-key",
             "requestHash": "preserve-me",
         }
         plan = plan_transaction(record)
@@ -69,6 +69,10 @@ class TransactionMigrationPlanTests(unittest.TestCase):
         self.assertEqual(plan["changes"]["createdAt"], record["timestamp"])
         self.assertEqual(plan["changes"]["quantity"], 3)
         self.assertEqual(plan["changes"]["canonicalType"], "IMPORT")
+        self.assertEqual(
+            plan["changes"]["gsi1sk"],
+            f"{record['timestamp']}#{record['transactionId']}",
+        )
         self.assertNotIn("transactionId", plan["changes"])
         self.assertNotIn("requestHash", plan["changes"])
 
