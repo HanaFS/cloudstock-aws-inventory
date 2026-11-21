@@ -27,6 +27,7 @@
   /* Sidebar Tokens */
   --sidebar-bg: #0f172a;
   --sidebar-w: 256px;
+  --sidebar-collapsed-w: 68px;
   --sidebar-text: #94a3b8;
   --sidebar-text-active: #ffffff;
   --sidebar-hover: #1e293b;

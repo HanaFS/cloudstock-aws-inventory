@@ -140,7 +140,101 @@ function switchView(viewName) {
 
 window.switchView = switchView;
 
+/**
+ * Khởi tạo tính năng Thu gọn / Mở rộng Sidebar
+ * Hỗ trợ:
+ * 1. Nút mũi tên trên sidebar (#sidebar-collapse-btn)
+ * 2. Biểu tượng menu toggle trên header (#header-menu-toggle)
+ * 3. Phím tắt Ctrl+B / Cmd+B hoặc Alt+S khi cần
+ * 4. Tự động lưu trạng thái thu gọn vào localStorage
+ * 5. Tự động đóng mobile drawer khi click overlay hoặc chọn phân hệ
+ */
+function initSidebar() {
+  const collapseBtn = document.getElementById("sidebar-collapse-btn");
+  const menuToggleBtn = document.getElementById("header-menu-toggle");
+  const overlay = document.getElementById("sidebar-overlay");
+
+  const isInitiallyCollapsed = localStorage.getItem("sidebar_collapsed") === "true";
+  if (isInitiallyCollapsed) {
+    document.body.classList.add("sidebar-collapsed");
+    document.documentElement.classList.add("sidebar-collapsed");
+    updateCollapseBtnState(true);
+  }
+
+  function updateCollapseBtnState(collapsed) {
+    if (collapseBtn) {
+      collapseBtn.title = collapsed
+        ? "Mở rộng sidebar (Ctrl+B)"
+        : "Thu gọn sidebar (Ctrl+B)";
+      collapseBtn.setAttribute(
+        "aria-label",
+        collapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"
+      );
+    }
+  }
+
+  function toggleSidebar() {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      document.body.classList.toggle("sidebar-mobile-open");
+    } else {
+      const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+      document.documentElement.classList.toggle("sidebar-collapsed", isCollapsed);
+      localStorage.setItem("sidebar_collapsed", isCollapsed ? "true" : "false");
+      updateCollapseBtnState(isCollapsed);
+    }
+  }
+
+  function closeMobileSidebar() {
+    document.body.classList.remove("sidebar-mobile-open");
+  }
+
+  if (collapseBtn) {
+    collapseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleSidebar();
+    });
+  }
+
+  if (menuToggleBtn) {
+    menuToggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleSidebar();
+    });
+  }
+
+  if (overlay) {
+    overlay.addEventListener("click", closeMobileSidebar);
+  }
+
+  // Phím tắt bàn phím (Keyboard Shortcuts):
+  // Ctrl + B / Cmd + B hoặc Alt + S
+  window.addEventListener("keydown", (e) => {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    if (isCtrlOrCmd && (e.key === "b" || e.key === "B")) {
+      e.preventDefault();
+      toggleSidebar();
+    } else if (e.altKey && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      toggleSidebar();
+    } else if (e.key === "Escape" && document.body.classList.contains("sidebar-mobile-open")) {
+      closeMobileSidebar();
+    }
+  });
+
+  // Tự động đóng mobile sidebar khi chọn phân hệ
+  document.querySelectorAll(".sidebar-nav .nav-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      if (window.innerWidth <= 768) {
+        closeMobileSidebar();
+      }
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initSidebar();
+
   document.querySelectorAll(".sidebar-nav .nav-item").forEach((item) => {
     item.addEventListener("click", () => {
       const view = item.getAttribute("data-view");
