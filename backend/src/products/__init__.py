@@ -6,6 +6,7 @@ from boto3.dynamodb.conditions import Attr
 
 from ..common.dynamodb import dynamodb, is_conditional_failure, scan_all, scan_page
 from ..common.http import ApiError, parse_body, require_any_group, success, with_error_handling
+from ..schema_compat import CompatibilityError, normalize_product
 
 PRODUCT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -14,22 +15,45 @@ def _table(name):
     return dynamodb.Table(os.environ[name])
 
 
+def _normalize_product_stock(record, product_id, conflict_status=409):
+    try:
+        return normalize_product({**record, "productId": product_id})
+    except CompatibilityError as error:
+        if error.code == "FIELD_CONFLICT":
+            code = "PRODUCT_DATA_CONFLICT" if conflict_status == 409 else "FIELD_CONFLICT"
+            raise ApiError(conflict_status, code, "quantity and stockQuantity conflict.") from error
+        raise ApiError(400, "INVALID_QUANTITY", "quantity/stockQuantity must be a non-negative integer.") from error
+
+
 def _validate_product(input_data, existing, product_id):
     if input_data.get("imageUrl") not in (None, ""):
         raise ApiError(400, "UPLOAD_REQUIRED", "Hãy tải ảnh lên S3 và gửi imageKey; không gửi URL hoặc Base64 trong request.")
-    values = {**(existing or {}), **input_data, "productId": product_id}
     if not isinstance(product_id, str) or not PRODUCT_ID_PATTERN.fullmatch(product_id):
         raise ApiError(400, "INVALID_PRODUCT_ID", "productId không hợp lệ.")
+    existing_values = _normalize_product_stock(existing, product_id) if existing is not None else {}
+    values = {**existing_values, **input_data, "productId": product_id}
+    stock_fields = {
+        field: input_data[field]
+        for field in ("quantity", "stockQuantity")
+        if field in input_data
+    }
+    if stock_fields:
+        incoming_stock = _normalize_product_stock(stock_fields, product_id, conflict_status=400)
+        values["quantity"] = incoming_stock["quantity"]
+        values["stockQuantity"] = incoming_stock["stockQuantity"]
     name = values.get("name", "").strip() if isinstance(values.get("name"), str) else ""
     category = values.get("category", "").strip() if isinstance(values.get("category"), str) else ""
     if not name or len(name) > 200:
         raise ApiError(400, "INVALID_NAME", "Tên sản phẩm là bắt buộc và tối đa 200 ký tự.")
     if not category or len(category) > 100:
         raise ApiError(400, "INVALID_CATEGORY", "Danh mục là bắt buộc và tối đa 100 ký tự.")
-    for field in ("price", "quantity", "minThreshold"):
+    for field in ("price", "minThreshold"):
         value = values.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ApiError(400, f"INVALID_{field.upper()}", f"{field} phải là số nguyên không âm.")
+    stock_quantity = values.get("stockQuantity")
+    if isinstance(stock_quantity, bool) or not isinstance(stock_quantity, int) or stock_quantity < 0:
+        raise ApiError(400, "INVALID_QUANTITY", "stockQuantity must be a non-negative integer.")
     supplier_id = values.get("supplierId") or None
     if supplier_id is not None and (not isinstance(supplier_id, str) or len(supplier_id) > 64):
         raise ApiError(400, "INVALID_SUPPLIER_ID", "supplierId không hợp lệ.")
@@ -41,8 +65,10 @@ def _validate_product(input_data, existing, product_id):
         "name": name,
         "category": category,
         "price": values["price"],
-        "quantity": values["quantity"],
+        "quantity": stock_quantity,
+        "stockQuantity": stock_quantity,
         "minThreshold": values["minThreshold"],
+        "status": "IN_STOCK" if stock_quantity > 0 else "OUT_OF_STOCK",
         "supplierId": supplier_id,
         "imageKey": image_key,
         "updatedAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
@@ -50,13 +76,17 @@ def _validate_product(input_data, existing, product_id):
 
 
 def _serialize_product(product):
+    normalized = _normalize_product_stock(product, product.get("productId"))
+    stock_quantity = normalized["stockQuantity"]
     return {
-        "productId": product["productId"],
+        "productId": normalized["productId"],
         "name": product["name"],
         "category": product["category"],
         "price": product["price"],
-        "quantity": product["quantity"],
+        "quantity": stock_quantity,
+        "stockQuantity": stock_quantity,
         "minThreshold": product["minThreshold"],
+        "status": "IN_STOCK" if stock_quantity > 0 else "OUT_OF_STOCK",
         "supplierId": product.get("supplierId"),
         "imageKey": product.get("imageKey"),
         "imageUrl": product.get("imageUrl"),
@@ -78,9 +108,11 @@ def handler(event, context=None):
 
     if method == "GET" and not product_id:
         params = event.get("queryStringParameters") or {}
-        filter_expression = Attr("quantity").lt(Attr("minThreshold")) if params.get("filter") == "low-stock" else None
-        page = scan_page(products, event, "productId", filter_expression)
-        return success([_serialize_product(item) for item in page["items"]], extra={"nextToken": page["nextToken"]} if page["nextToken"] else None)
+        page = scan_page(products, event, "productId")
+        items = [_serialize_product(item) for item in page["items"]]
+        if params.get("filter") == "low-stock":
+            items = [item for item in items if item["stockQuantity"] <= item["minThreshold"]]
+        return success(items, extra={"nextToken": page["nextToken"]} if page["nextToken"] else None)
     if method == "GET" and product_id:
         item = products.get_item(Key={"productId": product_id}).get("Item")
         if not item:
