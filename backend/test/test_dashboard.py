@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
+from scripts.local_api import resolve_route
 from src.dashboard import handler
 
 
@@ -116,6 +117,13 @@ class DashboardHandlerTests(unittest.TestCase):
         result = handler(event(method="POST"))
         self.assertEqual(result["statusCode"], 404)
         self.assertEqual(payload(result)["code"], "ROUTE_NOT_FOUND")
+
+    def test_dashboard_routes_and_local_alias_resolution(self):
+        for path in ("/dashboard", "/dashboard/stats"):
+            self.assertEqual(resolve_route("GET", path), ("dashboard", {}))
+            with patch("src.dashboard.scan_all", side_effect=[[], []]):
+                result = handler(event(resource=path))
+            self.assertEqual(result["statusCode"], 200)
 
 
 if __name__ == "__main__":

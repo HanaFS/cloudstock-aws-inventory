@@ -348,6 +348,39 @@ Resources:
             Path: /products/{productId}/image-uploads/{reservationId}/complete
             Method: POST
 
+  DashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.dashboard.handler
+      Environment:
+        Variables:
+          PRODUCTS_TABLE: !Ref ProductsTable
+          TRANSACTIONS_TABLE: !Ref TransactionsTable
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource: !GetAtt ProductsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource: !GetAtt TransactionsTable.Arn
+      Events:
+        Dashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /dashboard
+            Method: GET
+        DashboardStatsCompatibility:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /dashboard/stats
+            Method: GET
+
   ProductImagesBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain

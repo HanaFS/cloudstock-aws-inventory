@@ -9,11 +9,14 @@ MAX_BODY_BYTES = 1024 * 1024
 LOCAL_FRONTEND_ORIGIN = "http://localhost:8080"
 _COLLECTION = re.compile(r"^/(products|suppliers|transactions)$")
 _ITEM = re.compile(r"^/(products|suppliers|transactions)/([^/]+)$")
+_DASHBOARD = re.compile(r"^/dashboard(?:/stats)?$")
 
 
 def resolve_route(method, pathname):
     if method == "GET" and pathname == "/health":
         return "health", {}
+    if method == "GET" and _DASHBOARD.fullmatch(pathname):
+        return "dashboard", {}
     collection = _COLLECTION.fullmatch(pathname)
     if collection:
         resource = collection.group(1)
@@ -79,12 +82,14 @@ class LocalApiServer(ThreadingHTTPServer):
 
 def create_local_api_server(handlers=None, frontend_origin=LOCAL_FRONTEND_ORIGIN):
     if handlers is None:
+        from src.dashboard import handler as dashboard_handler
         from src.health import handler as health_handler
         from src.products import handler as products_handler
         from src.suppliers import handler as suppliers_handler
         from src.transactions import handler as transactions_handler
 
         handlers = {
+            "dashboard": dashboard_handler,
             "health": health_handler,
             "products": products_handler,
             "suppliers": suppliers_handler,

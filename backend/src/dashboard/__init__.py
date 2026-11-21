@@ -97,6 +97,7 @@ def _dashboard_stats(today=None):
 @with_error_handling
 def handler(event, context=None):
     require_any_group(event, ["Admin", "Staff"])
-    if event.get("httpMethod") != "GET" or event.get("resource") != "/dashboard":
+    route = event.get("resource") or event.get("path")
+    if event.get("httpMethod") != "GET" or route not in ("/dashboard", "/dashboard/stats"):
         raise ApiError(404, "ROUTE_NOT_FOUND", "Dashboard endpoint not found.")
     return success(_dashboard_stats())
