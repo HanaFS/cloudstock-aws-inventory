@@ -14,7 +14,7 @@ _ITEM = re.compile(r"^/(products|suppliers|transactions|users)/([^/]+)$")
 def resolve_route(method, pathname):
     if method == "GET" and pathname == "/health":
         return "health", {}
-    if pathname == "/dashboard" and method == "GET":
+    if pathname in ("/dashboard", "/dashboard/stats") and method == "GET":
         return "dashboard", {}
     if pathname == "/logs" and method == "GET":
         return "logs", {}
@@ -27,6 +27,9 @@ def resolve_route(method, pathname):
         return "transactions", {"transactionId": unquote(invoice.group(1))}
     if pathname == "/users" and method in ("GET", "POST"):
         return "users", {}
+    password_reset = re.fullmatch(r"^/users/([^/]+)/reset-password$", pathname)
+    if password_reset and method == "POST":
+        return "users", {"userId": unquote(password_reset.group(1))}
     collection = _COLLECTION.fullmatch(pathname)
     if collection:
         resource = collection.group(1)

@@ -95,12 +95,14 @@ class ProductHandlerTests(unittest.TestCase):
                 "name": " USB-C cable ",
                 "category": "Accessories",
                 "price": 250000,
-                "stockQuantity": 20,
+                "quantity": 20,
                 "minThreshold": 5,
                 "updatedAt": "client-value",
             }))
         self.assertEqual(result["statusCode"], 201)
         self.assertEqual(response_body(result)["data"]["name"], "USB-C cable")
+        self.assertEqual(response_body(result)["data"]["quantity"], 20)
+        self.assertNotIn("stockQuantity", response_body(result)["data"])
         self.assertEqual(response_body(result)["data"]["status"], "IN_STOCK")
         self.assertNotEqual(response_body(result)["data"]["updatedAt"], "client-value")
         self.assertIsNotNone(products.last_put["ConditionExpression"])
@@ -116,7 +118,7 @@ class ProductHandlerTests(unittest.TestCase):
                 "name": "Cable",
                 "category": "Accessories",
                 "price": 1,
-                "stockQuantity": -1,
+                "quantity": -1,
                 "minThreshold": 0,
             }))
         self.assertEqual(result["statusCode"], 400)
@@ -158,11 +160,11 @@ class TransactionHandlerTests(unittest.TestCase):
 
             result = handler(event("POST", {
                 "transactionId": "client-id",
-                "createdAt": "client-time",
+                "timestamp": "client-time",
                 "performedBy": "client-user",
-                "type": "EXPORT",
+                "type": "OUT",
                 "productId": "prod-001",
-                "quantity": 3,
+                "amount": 3,
                 "reason": "warehouse use",
             }, headers={"Idempotency-Key": "request-001"}, claims={
                 "cognito:groups": ["Staff"],
@@ -174,8 +176,12 @@ class TransactionHandlerTests(unittest.TestCase):
         transaction_put = calls[0]["TransactItems"][1]["Put"]["Item"]
         self.assertEqual(data["performedBy"], "staff.tran")
         self.assertNotEqual(data["transactionId"], "client-id")
-        self.assertEqual(data["type"], "EXPORT")
-        self.assertEqual(data["quantity"], 3)
+        self.assertEqual(data["type"], "OUT")
+        self.assertEqual(data["amount"], 3)
+        self.assertIn("timestamp", data)
+        self.assertNotIn("createdAt", data)
+        self.assertEqual(transaction_put["type"]["S"], "EXPORT")
+        self.assertEqual(transaction_put["quantity"]["N"], "3")
         self.assertEqual(transaction_put["productName"]["S"], "Paper")
         self.assertEqual(
             calls[0]["TransactItems"][0]["Update"]["ExpressionAttributeValues"][":delta"]["N"],
@@ -192,12 +198,59 @@ class TransactionHandlerTests(unittest.TestCase):
             from src.transactions import handler
 
             result = handler(event("POST", {
-                "type": "IMPORT",
+                "type": "IN",
                 "productId": "prod-001",
-                "quantity": 1,
+                "amount": 1,
             }, headers={}, claims={"cognito:groups": ["Staff"], "sub": "user-sub-001"}))
         self.assertEqual(result["statusCode"], 400)
         self.assertEqual(response_body(result)["code"], "IDEMPOTENCY_KEY_REQUIRED")
+
+    @patch.dict(os.environ, {
+        "TABLE_TRANSACTIONS": "transactions",
+        "TABLE_PRODUCTS": "products",
+        "TABLE_SUPPLIERS": "suppliers",
+    })
+    def test_import_accepts_frontend_fields_and_returns_frontend_schema(self):
+        products = FakeTable({("prod-001",): {
+            "productId": "prod-001", "name": "Paper", "stockQuantity": 10,
+        }})
+        calls = []
+
+        class FakeClient:
+            def transact_write_items(self, **kwargs):
+                calls.append(kwargs)
+
+        with patch("src.transactions.dynamodb", FakeDynamo(
+            {
+                "transactions": FakeTable(),
+                "products": products,
+                "suppliers": FakeTable({("sup-001",): {"supplierId": "sup-001"}}),
+            },
+            FakeClient(),
+        )):
+            from src.transactions import handler
+
+            result = handler(event("POST", {
+                "type": "IN",
+                "productId": "prod-001",
+                "amount": 6,
+                "supplierId": "sup-001",
+                "reason": "Restock",
+            }, headers={"Idempotency-Key": "request-import"}, claims={
+                "cognito:groups": ["Staff"],
+                "cognito:username": "staff.tran",
+                "sub": "user-sub-001",
+            }))
+
+        data = response_body(result)["data"]
+        stored_transaction = calls[0]["TransactItems"][1]["Put"]["Item"]
+        self.assertEqual(result["statusCode"], 201)
+        self.assertEqual(data["type"], "IN")
+        self.assertEqual(data["amount"], 6)
+        self.assertEqual(data["reason"], "Restock")
+        self.assertIn("timestamp", data)
+        self.assertEqual(stored_transaction["type"]["S"], "IMPORT")
+        self.assertEqual(stored_transaction["quantity"]["N"], "6")
 
 
 class CloudFeatureHandlerTests(unittest.TestCase):
@@ -245,6 +298,64 @@ class CloudFeatureHandlerTests(unittest.TestCase):
             result = handler(request)
         self.assertEqual(result["statusCode"], 403)
         cognito.assert_not_called()
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_user_api_uses_frontend_locked_status_and_reset_password_route(self):
+        class FakeCognito:
+            def __init__(self):
+                self.reset_request = None
+                self.enabled = True
+
+            def admin_get_user(self, **kwargs):
+                return {
+                    "Username": kwargs["Username"],
+                    "Enabled": self.enabled,
+                    "Attributes": [
+                        {"Name": "sub", "Value": "12345678-1234-1234-1234-123456789012"},
+                        {"Name": "email", "Value": "staff@example.test"},
+                    ],
+                }
+
+            def admin_list_groups_for_user(self, **kwargs):
+                return {"Groups": [{"GroupName": "Staff"}]}
+
+            def admin_reset_user_password(self, **kwargs):
+                self.reset_request = kwargs
+
+            def admin_disable_user(self, **kwargs):
+                self.enabled = False
+
+        cognito = FakeCognito()
+        request = event("POST", path_parameters={"userId": "staff.one"}, claims={
+            "cognito:groups": ["Admin"],
+            "cognito:username": "admin.one",
+        })
+        request["path"] = "/users/staff.one/reset-password"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler, _serialize_user
+
+            result = handler(request)
+            user = _serialize_user(cognito, {
+                "Username": "staff.one",
+                "Enabled": False,
+                "Attributes": [],
+            })
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(response_body(result)["data"], {"passwordResetRequested": True})
+        self.assertEqual(cognito.reset_request["Username"], "staff.one")
+        self.assertEqual(user["status"], "LOCKED")
+
+        update_request = event("PUT", {"status": "LOCKED"},
+            path_parameters={"userId": "staff.one"}, claims={
+                "cognito:groups": ["Admin"],
+                "cognito:username": "admin.one",
+            })
+        update_request["path"] = "/users/staff.one"
+        with patch("src.users._client", return_value=cognito):
+            update_result = handler(update_request)
+        self.assertEqual(update_result["statusCode"], 200)
+        self.assertEqual(response_body(update_result)["data"]["status"], "LOCKED")
 
     @patch.dict(os.environ, {"BUCKET_NAME": "test-assets", "AWS_REGION": "ap-southeast-1"})
     def test_product_image_upload_is_scoped_and_size_limited(self):
@@ -296,6 +407,11 @@ class LocalApiTests(unittest.TestCase):
         self.assertEqual(configure_local_environment(environment)["STAGE"], "dev")
         self.assertEqual(environment["TABLE_PRODUCTS"], "cloudstock-dev-products")
         self.assertEqual(resolve_route("GET", "/dashboard"), ("dashboard", {}))
+        self.assertEqual(resolve_route("GET", "/dashboard/stats"), ("dashboard", {}))
+        self.assertEqual(
+            resolve_route("POST", "/users/staff.one/reset-password"),
+            ("users", {"userId": "staff.one"}),
+        )
         self.assertEqual(resolve_route("POST", "/products/upload-url"), ("products", {}))
         self.assertEqual(
             resolve_route("GET", "/transactions/txn-1/invoice-url"),

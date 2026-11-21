@@ -14,6 +14,12 @@ def _table(name):
 
 
 def _validate_product(input_data, existing, product_id):
+    input_data = dict(input_data)
+    if "quantity" in input_data:
+        quantity = input_data.pop("quantity")
+        if "stockQuantity" in input_data and input_data["stockQuantity"] != quantity:
+            raise ApiError(400, "CONFLICTING_QUANTITY", "quantity và stockQuantity phải có cùng giá trị.")
+        input_data["stockQuantity"] = quantity
     values = {**(existing or {}), **input_data, "productId": product_id}
     if not isinstance(product_id, str) or not PRODUCT_ID_PATTERN.fullmatch(product_id):
         raise ApiError(400, "INVALID_PRODUCT_ID", "productId không hợp lệ.")
@@ -58,7 +64,7 @@ def _serialize_product(product):
         "name": product["name"],
         "category": product["category"],
         "price": product["price"],
-        "stockQuantity": product["stockQuantity"],
+        "quantity": product["stockQuantity"],
         "minThreshold": product["minThreshold"],
         "status": product["status"],
         "supplierId": product.get("supplierId"),

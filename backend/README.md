@@ -12,6 +12,7 @@ của người phụ trách Cloud; xem [API contract](API_CONTRACT.md) để bi�
 - `GET|POST /suppliers`, `GET|PUT|DELETE /suppliers/{supplierId}`.
 - `GET /transactions`, `GET /transactions/{transactionId}`, `POST /transactions`.
 - `GET|POST /users`, `GET|PUT|DELETE /users/{userId}` (chỉ Admin).
+- `POST /users/{userId}/reset-password` gửi yêu cầu đặt lại mật khẩu qua Cognito (chỉ Admin).
 - `GET /dashboard`.
 - `GET /logs` (chỉ Admin).
 - `POST /products/upload-url` tạo presigned POST cho ảnh sản phẩm.
@@ -25,16 +26,19 @@ Các API trừ `/health` yêu cầu Cognito group `Admin` hoặc `Staff`; `/user
 dịch được thực hiện trong một DynamoDB transaction; xung đột stock bị từ chối
 để client có thể retry an toàn với cùng key.
 
-Schema API dùng trực tiếp `stockQuantity`, `status`, `type=IMPORT|EXPORT`,
-`quantity` và `createdAt` trên cả frontend lẫn backend. `status` sản phẩm do
-backend tính: stock lớn hơn 0 là `IN_STOCK`, ngược lại `OUT_OF_STOCK`. Trạng
-thái tài khoản dùng `ACTIVE` hoặc `DISABLED`.
+Schema API khớp frontend: sản phẩm dùng `quantity`; giao dịch dùng
+`type=IN|OUT`, `amount`, `timestamp`; trạng thái user là `ACTIVE|LOCKED`.
+Backend ánh xạ các trường này sang storage hiện tại của DynamoDB
+(`stockQuantity`, `IMPORT|EXPORT`, `quantity`, `createdAt`) và Cognito
+(`Enabled`). `status` tồn kho nội bộ được tính từ số lượng.
 
 Ảnh chỉ nhận JPEG/PNG/WebP tối đa 5 MB và lưu trong `products/` (public read).
 Hóa đơn chỉ nhận PDF/JPEG/PNG tối đa 15 MB, lưu trong `invoices/` (private).
 `invoiceUrl` lưu S3 object key, không lưu URL ký tạm thời; API chỉ cấp URL đọc
-ngắn hạn sau khi xác thực quyền. Tài khoản không gửi mật khẩu qua API; Cognito
-gửi mật khẩu khởi tạo đến email khi Admin tạo user.
+ngắn hạn sau khi xác thực quyền. Các endpoint presigned đã có, nhưng frontend
+hiện tại từ chối request có ảnh/chứng từ trước khi gọi API nên upload thật cần
+được nối ở frontend. Cognito gửi mật khẩu khởi tạo/đặt lại qua email; API không
+nhận mật khẩu dạng rõ.
 
 Dashboard tổng hợp số liệu từ ba bảng. Danh sách sản phẩm, nhà cung cấp,
 dashboard và các kiểm tra xóa dùng DynamoDB `Scan`; đây là cách triển khai cho
@@ -125,3 +129,20 @@ image access, và quyền IAM. Tài liệu của Cloud chưa nêu route request/
 chi tiết cho tất cả module hoặc xác nhận GSI giao dịch; các lựa chọn hiện dùng
 được ghi rõ trong [API contract](API_CONTRACT.md). Tài nguyên AWS chưa được
 deploy bởi thay đổi này.
+
+Template không tạo sẵn Admin đầu tiên. Sau khi được duyệt deploy, operator có
+quyền Cognito cần tạo user đầu tiên và thêm vào group `Admin`, ví dụ:
+
+```powershell
+aws cognito-idp admin-create-user `
+  --user-pool-id YOUR_USER_POOL_ID `
+  --username admin@example.com `
+  --user-attributes "Name=email,Value=admin@example.com" "Name=name,Value=CloudStock Admin" "Name=email_verified,Value=true" `
+  --desired-delivery-mediums EMAIL
+aws cognito-idp admin-add-user-to-group `
+  --user-pool-id YOUR_USER_POOL_ID `
+  --username admin@example.com `
+  --group-name Admin
+```
+
+Đây chỉ là hướng dẫn vận hành; các lệnh chưa được chạy.

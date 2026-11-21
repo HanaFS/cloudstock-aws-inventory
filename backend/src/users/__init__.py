@@ -56,7 +56,7 @@ def _serialize_user(client, user):
         "fullName": attributes.get("name", user["Username"]),
         "email": attributes.get("email", ""),
         "role": role,
-        "status": "ACTIVE" if user.get("Enabled", True) else "DISABLED",
+        "status": "ACTIVE" if user.get("Enabled", True) else "LOCKED",
     }
 
 
@@ -179,6 +179,8 @@ def handler(event, context=None):
 
     if method == "PUT" and username:
         body = parse_body(event)
+        if body.get("status") == "LOCKED":
+            body["status"] = "DISABLED"
         allowed_fields = {"email", "fullName", "role", "status"}
         if not body or set(body) - allowed_fields:
             raise ApiError(400, "INVALID_USER_UPDATE", "Gửi ít nhất một trường hợp lệ: email, fullName, role, status.")
@@ -212,6 +214,17 @@ def handler(event, context=None):
                 action = "admin_enable_user" if body["status"] == "ACTIVE" else "admin_disable_user"
                 getattr(client, action)(UserPoolId=pool_id, Username=username)
             return success(_serialize_user(client, _find_user(client, username)))
+        except ClientError as error:
+            _handle_client_error(error)
+
+    if method == "POST" and username and event.get("path", "").endswith("/reset-password"):
+        user = _find_user(client, username)
+        try:
+            client.admin_reset_user_password(
+                UserPoolId=pool_id,
+                Username=user["Username"],
+            )
+            return success({"passwordResetRequested": True})
         except ClientError as error:
             _handle_client_error(error)
 

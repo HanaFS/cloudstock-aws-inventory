@@ -22,15 +22,20 @@ def _client():
 
 
 def _validate_transaction(input_data):
+    input_data = dict(input_data)
     transaction_type = input_data.get("type")
+    transaction_type = {"IN": "IMPORT", "OUT": "EXPORT"}.get(transaction_type, transaction_type)
     if transaction_type not in ("IMPORT", "EXPORT"):
-        raise ApiError(400, "INVALID_TYPE", "type phải là IMPORT hoặc EXPORT.")
+        raise ApiError(400, "INVALID_TYPE", "type phải là IN hoặc OUT.")
     product_id = input_data.get("productId")
     if not isinstance(product_id, str) or not PRODUCT_ID_PATTERN.fullmatch(product_id):
         raise ApiError(400, "INVALID_PRODUCT_ID", "productId không hợp lệ.")
-    quantity = input_data.get("quantity")
+    amount = input_data.pop("amount", None)
+    quantity = input_data.get("quantity", amount)
+    if "quantity" in input_data and amount is not None and input_data["quantity"] != amount:
+        raise ApiError(400, "CONFLICTING_QUANTITY", "amount và quantity phải có cùng giá trị.")
     if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
-        raise ApiError(400, "INVALID_QUANTITY", "quantity phải là số nguyên dương.")
+        raise ApiError(400, "INVALID_QUANTITY", "amount phải là số nguyên dương.")
     supplier_id = input_data.get("supplierId") or None
     if supplier_id is not None and (
         transaction_type != "IMPORT"
@@ -38,7 +43,7 @@ def _validate_transaction(input_data):
         or len(supplier_id) > 64
     ):
         raise ApiError(400, "INVALID_SUPPLIER_ID", "supplierId chỉ hợp lệ cho IMPORT.")
-    invoice_url = input_data.get("invoiceUrl") or None
+    invoice_url = input_data.get("invoiceKey") or input_data.get("invoiceUrl") or None
     if invoice_url is not None and (
         transaction_type != "IMPORT"
         or not isinstance(invoice_url, str)
@@ -52,7 +57,9 @@ def _validate_transaction(input_data):
         if not reason or len(reason) > 500:
             raise ApiError(400, "INVALID_REASON", "reason là bắt buộc cho EXPORT và tối đa 500 ký tự.")
     elif reason is not None:
-        raise ApiError(400, "INVALID_REASON", "reason chỉ dùng cho EXPORT.")
+        reason = reason.strip() if isinstance(reason, str) else ""
+        if len(reason) > 500:
+            raise ApiError(400, "INVALID_REASON", "reason tối đa 500 ký tự.")
     return {
         "type": transaction_type,
         "productId": product_id,
@@ -66,19 +73,19 @@ def _validate_transaction(input_data):
 def _serialize_transaction(transaction):
     result = {
         "transactionId": transaction["transactionId"],
-        "createdAt": transaction["createdAt"],
+        "timestamp": transaction["createdAt"],
         "performedBy": transaction["performedBy"],
-        "type": transaction["type"],
+        "type": {"IMPORT": "IN", "EXPORT": "OUT"}[transaction["type"]],
         "productId": transaction["productId"],
         "productName": transaction["productName"],
-        "quantity": transaction["quantity"],
+        "amount": transaction["quantity"],
     }
     if transaction["type"] == "IMPORT":
         if transaction.get("supplierId"):
             result["supplierId"] = transaction["supplierId"]
         if transaction.get("invoiceUrl"):
             result["invoiceUrl"] = transaction["invoiceUrl"]
-    elif transaction.get("reason"):
+    if transaction.get("reason"):
         result["reason"] = transaction["reason"]
     return result
 
