@@ -344,6 +344,7 @@ Resources:
                 - cognito-idp:AdminAddUserToGroup
                 - cognito-idp:AdminRemoveUserFromGroup
                 - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminResetUserPassword
               Resource: !GetAtt CloudStockUserPool.Arn
       Events:
         ListUsers:
@@ -376,6 +377,12 @@ Resources:
             RestApiId: !Ref CloudStockApi
             Path: /users/{userId}
             Method: DELETE
+        ResetUserPassword:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{userId}/reset-password
+            Method: POST
 
   DashboardFunction:
     Type: AWS::Serverless::Function
