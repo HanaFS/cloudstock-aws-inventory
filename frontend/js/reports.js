@@ -634,3 +634,4 @@ const ReportsModule = (() => {
     simulateCloudWatchEvent,
   };
 })();
+window.ReportsModule = ReportsModule
