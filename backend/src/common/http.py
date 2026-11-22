@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from decimal import Decimal
 from functools import wraps
 
 
@@ -9,6 +10,12 @@ class ApiError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+
+
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 def response(status_code, payload):
@@ -21,7 +28,9 @@ def response(status_code, payload):
             ),
             "Vary": "Origin",
         },
-        "body": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        "body": json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"), default=_json_default
+        ),
     }
 
 

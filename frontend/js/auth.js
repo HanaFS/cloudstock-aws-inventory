@@ -548,3 +548,4 @@ const AuthModule = (() => {
     showToast,
   };
 })();
+window.AuthModule = AuthModule

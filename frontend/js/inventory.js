@@ -578,3 +578,4 @@ const InventoryModule = (() => {
     switchSubTab,
   };
 })();
+window.InventoryModule = InventoryModule
