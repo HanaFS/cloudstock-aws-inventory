@@ -6,9 +6,6 @@ const InventoryModule = (() => {
   let attachedInvoiceName = "";
   let attachedInvoiceData = "";
 
-   
-
-
   async function loadData() {
     try {
       const [prodRes, supRes] = await Promise.all([
@@ -37,7 +34,6 @@ const InventoryModule = (() => {
     const outProdSelect = document.getElementById("inv-out-product");
     const supSelect = document.getElementById("inv-in-supplier");
 
-     
     let inProdHtml = `<option value="">-- Chọn sản phẩm nhập --</option>`;
      
     let outProdHtml = `<option value="">-- Chọn sản phẩm xuất --</option>`;
@@ -75,9 +71,6 @@ const InventoryModule = (() => {
     sessionStorage.removeItem("cloudstock_prefill_product_id");
   }
 
-   
-
-
   function switchSubTab(tab) {
     currentSubTab = tab;
 
@@ -98,9 +91,6 @@ const InventoryModule = (() => {
       if (panelOut) panelOut.style.display = "block";
     }
   }
-
-   
-
 
   function handleInProductChange() {
     const select = document.getElementById("inv-in-product");
@@ -137,7 +127,6 @@ const InventoryModule = (() => {
 
     const amount = parseInt(amountVal, 10);
 
-     
     if (!productId) {
       if (window.AuthModule) AuthModule.showToast("Vui lòng chọn sản phẩm cần nhập kho", "warning");
       return;
@@ -154,11 +143,6 @@ const InventoryModule = (() => {
     const currentUser = ApiService.Auth.getCurrentUser();
     const performedBy = currentUser ? currentUser.fullName || currentUser.username : "Thủ kho";
 
-     
-    const invoiceUrl = attachedInvoiceName
-      ? `s3://cloudstock-invoices-ap-southeast-1/invoices/${Date.now()}_${attachedInvoiceName}`
-      : "";
-
     const transaction = {
       transactionId: "txn-" + Date.now().toString(36),
       timestamp: new Date().toISOString(),
@@ -169,14 +153,13 @@ const InventoryModule = (() => {
       amount,
       supplierId,
       reason: note || "Nhập kho bổ sung hàng hoá",
-      invoiceUrl,
+      invoiceKey: null,                           
     };
 
     try {
        
       await ApiService.Transactions.create(transaction);
 
-       
       const supObj = supplierList.find((s) => s.supplierId === supplierId);
       const supName = supObj ? supObj.name : "Ngoài danh mục";
       const s3Log = attachedInvoiceName ? ` - File S3: ${attachedInvoiceName}` : "";
@@ -197,7 +180,6 @@ const InventoryModule = (() => {
         );
       }
 
-       
       document.getElementById("form-inbound")?.reset();
       document.getElementById("inv-in-prod-info").style.display = "none";
       attachedInvoiceName = "";
@@ -207,10 +189,8 @@ const InventoryModule = (() => {
         dropzoneText.textContent = "Kéo thả hoá đơn / chứng từ (PDF, JPG, PNG) hoặc bấm để chọn tệp";
       }
 
-       
       await loadData();
 
-       
       if (window.DashboardModule) DashboardModule.renderDashboard();
     } catch (err) {
       if (window.AuthModule) {
@@ -218,9 +198,6 @@ const InventoryModule = (() => {
       }
     }
   }
-
-   
-
 
   function handleOutProductChange() {
     const select = document.getElementById("inv-out-product");
@@ -343,7 +320,6 @@ const InventoryModule = (() => {
       amount,
       supplierId: null,
       reason: fullReason,
-      invoiceUrl: "",
     };
 
     try {
@@ -352,7 +328,6 @@ const InventoryModule = (() => {
 
       const remainingQty = prod.quantity - amount;
 
-       
       if (remainingQty < prod.minThreshold) {
          
         if (window.AuthModule) {
@@ -362,7 +337,6 @@ const InventoryModule = (() => {
           );
         }
 
-         
         if (typeof MockDataStore !== "undefined") {
           MockDataStore.add("systemLogs", {
             timestamp: new Date().toISOString(),
@@ -380,7 +354,6 @@ const InventoryModule = (() => {
         }
       }
 
-       
       if (typeof MockDataStore !== "undefined") {
         MockDataStore.add("systemLogs", {
           timestamp: new Date().toISOString(),
@@ -390,14 +363,11 @@ const InventoryModule = (() => {
         });
       }
 
-       
       document.getElementById("form-outbound")?.reset();
       document.getElementById("inv-out-prod-info").style.display = "none";
       document.getElementById("inv-out-warning-box").style.display = "none";
-
        
       await loadData();
-
        
       if (window.DashboardModule) DashboardModule.renderDashboard();
     } catch (err) {
@@ -407,9 +377,6 @@ const InventoryModule = (() => {
     }
   }
 
-   
-
-
   async function renderRecentTransactions() {
     const tbody = document.getElementById("inv-recent-table-body");
     if (!tbody) return;
@@ -418,7 +385,6 @@ const InventoryModule = (() => {
       const res = await ApiService.Transactions.getAll();
       const allTxns = res.data || [];
 
-       
       const recent = allTxns.slice(-5).reverse();
 
       if (recent.length === 0) {
@@ -433,8 +399,8 @@ const InventoryModule = (() => {
             ? `<span class="badge badge-in">NHAP (+${formatNumber(t.amount)})</span>`
             : `<span class="badge badge-out">XUAT (-${formatNumber(t.amount)})</span>`;
 
-          const invoiceIndicator = t.invoiceUrl
-            ? `<span class="badge badge-info" title="${t.invoiceUrl}">Co chung tu S3</span>`
+          const invoiceIndicator = t.invoiceKey
+            ? `<span class="badge badge-info" title="${t.invoiceKey}">Co chung tu S3</span>`
             : `<span class="text-muted">-</span>`;
 
           return `
@@ -455,9 +421,6 @@ const InventoryModule = (() => {
       tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Lỗi tải lịch sử giao dịch: ${err.message}</td></tr>`;
     }
   }
-
-   
-
 
   function setupDropzone() {
     const dropzone = document.getElementById("inv-invoice-dropzone");
@@ -518,9 +481,6 @@ const InventoryModule = (() => {
     }
   }
 
-   
-
-
   function formatNumber(n) {
     if (typeof n !== "number" || isNaN(n)) return "0";
     return new Intl.NumberFormat("vi-VN").format(n);
@@ -540,9 +500,6 @@ const InventoryModule = (() => {
     }
   }
 
-   
-
-
   function init() {
      
     const inProd = document.getElementById("inv-in-product");
@@ -561,7 +518,6 @@ const InventoryModule = (() => {
     const formOut = document.getElementById("form-outbound");
     if (formOut) formOut.addEventListener("submit", handleOutboundSubmit);
 
-     
     setupDropzone();
   }
 
@@ -571,11 +527,10 @@ const InventoryModule = (() => {
     init();
   }
 
-   
   return {
     init,
     loadData,
     switchSubTab,
   };
 })();
-window.InventoryModule = InventoryModule
+window.InventoryModule = InventoryModule;
