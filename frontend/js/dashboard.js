@@ -425,3 +425,4 @@ const DashboardModule = (() => {
     formatNumber,
   };
 })();
+window.DashboardModule = DashboardModule;

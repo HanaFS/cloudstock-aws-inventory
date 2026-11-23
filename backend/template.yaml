@@ -11,10 +11,11 @@ Parameters:
       - prod
   FrontendOrigin:
     Type: String
-    Default: http://localhost:8080
+    Default: https://d7omav63h53i1.cloudfront.net
     Description: Exact frontend origin allowed by API CORS.
   CognitoDomainPrefix:
     Type: String
+    Default: cloudstock-nhom4-202600
     AllowedPattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
     ConstraintDescription: Use 1-63 lowercase letters, numbers, or hyphens; do not start or end with a hyphen.
     Description: Globally unique prefix for the Cognito Hosted UI domain.
@@ -26,9 +27,9 @@ Conditions:
 
 Globals:
   Function:
-    Runtime: python3.12
-    Timeout: 10
-    MemorySize: 128
+    Runtime: python3.13
+    Timeout: 30
+    MemorySize: 512
     Environment:
       Variables:
         STAGE: !Ref Stage
@@ -106,14 +107,28 @@ Resources:
       EndpointConfiguration: REGIONAL
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt CloudStockUserPool.Arn
       Cors:
         AllowOrigin: !Sub "'${FrontendOrigin}'"
-        AllowHeaders: "'Content-Type,Authorization,Idempotency-Key'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Idempotency-Key'"
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         MaxAge: "'600'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   HealthFunction:
     Type: AWS::Serverless::Function
@@ -134,12 +149,14 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: .
-      Handler: src.products.handler
+      Handler: src.catalog.handler
       Environment:
         Variables:
-          PRODUCTS_TABLE: !Ref ProductsTable
-          SUPPLIERS_TABLE: !Ref SuppliersTable
-          TRANSACTIONS_TABLE: !Ref TransactionsTable
+          TABLE_PRODUCTS: !Ref ProductsTable
+          TABLE_SUPPLIERS: !Ref SuppliersTable
+          TABLE_TRANSACTIONS: !Ref TransactionsTable
+          BUCKET_NAME: !Ref ProductAssetsBucket
+          PRODUCT_IMAGE_BASE_URL: !Sub "https://${ProductAssetsBucket}.s3.${AWS::Region}.amazonaws.com"
       Policies:
         - Statement:
             - Effect: Allow
@@ -153,11 +170,19 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
               Resource: !GetAtt SuppliersTable.Arn
             - Effect: Allow
               Action:
                 - dynamodb:Scan
               Resource: !GetAtt TransactionsTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "${ProductAssetsBucket.Arn}/products/*"
       Events:
         ListProducts:
           Type: Api
@@ -189,36 +214,6 @@ Resources:
             RestApiId: !Ref CloudStockApi
             Path: /products/{productId}
             Method: DELETE
-
-  SuppliersFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: .
-      Handler: src.suppliers.handler
-      Environment:
-        Variables:
-          SUPPLIERS_TABLE: !Ref SuppliersTable
-          PRODUCTS_TABLE: !Ref ProductsTable
-          TRANSACTIONS_TABLE: !Ref TransactionsTable
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:PutItem
-                - dynamodb:UpdateItem
-                - dynamodb:DeleteItem
-                - dynamodb:Scan
-              Resource: !GetAtt SuppliersTable.Arn
-            - Effect: Allow
-              Action:
-                - dynamodb:Scan
-              Resource: !GetAtt ProductsTable.Arn
-            - Effect: Allow
-              Action:
-                - dynamodb:Scan
-              Resource: !GetAtt TransactionsTable.Arn
-      Events:
         ListSuppliers:
           Type: Api
           Properties:
@@ -249,6 +244,12 @@ Resources:
             RestApiId: !Ref CloudStockApi
             Path: /suppliers/{supplierId}
             Method: DELETE
+        ProductImageUploadUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /products/upload-url
+            Method: POST
 
   TransactionsFunction:
     Type: AWS::Serverless::Function
@@ -257,29 +258,47 @@ Resources:
       Handler: src.transactions.handler
       Environment:
         Variables:
-          TRANSACTIONS_TABLE: !Ref TransactionsTable
-          PRODUCTS_TABLE: !Ref ProductsTable
-          SUPPLIERS_TABLE: !Ref SuppliersTable
+          TABLE_TRANSACTIONS: !Ref TransactionsTable
+          TABLE_PRODUCTS: !Ref ProductsTable
+          TABLE_SUPPLIERS: !Ref SuppliersTable
+          BUCKET_NAME: !Ref ProductAssetsBucket
+          LOG_GROUPS: !Sub "/aws/lambda/${AWS::StackName}-UsersFunction,/aws/lambda/${AWS::StackName}-DashboardFunction,/aws/lambda/${AWS::StackName}-ProductsFunction,/aws/lambda/${AWS::StackName}-TransactionsFunction"
       Policies:
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
+                - dynamodb:Query
                 - dynamodb:TransactWriteItems
               Resource: !GetAtt ProductsTable.Arn
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
                 - dynamodb:TransactWriteItems
               Resource: !GetAtt TransactionsTable.Arn
             - Effect: Allow
               Action:
                 - dynamodb:Query
-              Resource: !Sub "${TransactionsTable.Arn}/index/ByTimestamp"
+              Resource: !Sub "${TransactionsTable.Arn}/index/ByCreatedAt"
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
               Resource: !GetAtt SuppliersTable.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub "${ProductAssetsBucket.Arn}/invoices/*"
+            - Effect: Allow
+              Action:
+                - logs:FilterLogEvents
+              Resource:
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-UsersFunction:*"
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-DashboardFunction:*"
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-ProductsFunction:*"
+                - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-TransactionsFunction:*"
       Events:
         ListTransactions:
           Type: Api
@@ -299,6 +318,155 @@ Resources:
             RestApiId: !Ref CloudStockApi
             Path: /transactions/{transactionId}
             Method: GET
+        InvoiceUploadUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /transactions/invoice-upload-url
+            Method: POST
+        InvoiceDownloadUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /transactions/{transactionId}/invoice-url
+            Method: GET
+        SystemLogs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /logs
+            Method: GET
+
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.users.handler
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref CloudStockUserPool
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminListUsers
+                - cognito-idp:AdminUpdateUserAttributes
+                - cognito-idp:AdminEnableUser
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminDeleteUser
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminRemoveUserFromGroup
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminResetUserPassword
+              Resource: !GetAtt CloudStockUserPool.Arn
+      Events:
+        ListUsers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users
+            Method: GET
+        CreateUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users
+            Method: POST
+        ReadUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{userId}
+            Method: GET
+        UpdateUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{userId}
+            Method: PUT
+        DeleteUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{userId}
+            Method: DELETE
+        ResetUserPassword:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /users/{userId}/reset-password
+            Method: POST
+
+  DashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src.dashboard.handler
+      Environment:
+        Variables:
+          TABLE_PRODUCTS: !Ref ProductsTable
+          TABLE_SUPPLIERS: !Ref SuppliersTable
+          TABLE_TRANSACTIONS: !Ref TransactionsTable
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !GetAtt ProductsTable.Arn
+                - !GetAtt SuppliersTable.Arn
+                - !GetAtt TransactionsTable.Arn
+      Events:
+        Dashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /dashboard
+            Method: GET
+        DashboardStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CloudStockApi
+            Path: /dashboard/stats
+            Method: GET
+
+  ProductAssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "cloudstock-assets-${Stage}-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref FrontendOrigin
+            AllowedMethods:
+              - POST
+            AllowedHeaders:
+              - "*"
+            MaxAge: 600
+
+  ProductImagesPublicReadPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ProductAssetsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadProductImagesOnly
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${ProductAssetsBucket.Arn}/products/*"
 
   ProductsTable:
     Type: AWS::DynamoDB::Table
@@ -336,6 +504,8 @@ Resources:
       AttributeDefinitions:
         - AttributeName: transactionId
           AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
         - AttributeName: gsi1pk
           AttributeType: S
         - AttributeName: gsi1sk
@@ -343,8 +513,10 @@ Resources:
       KeySchema:
         - AttributeName: transactionId
           KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
       GlobalSecondaryIndexes:
-        - IndexName: ByTimestamp
+        - IndexName: ByCreatedAt
           KeySchema:
             - AttributeName: gsi1pk
               KeyType: HASH
@@ -374,3 +546,5 @@ Outputs:
     Value: !Ref SuppliersTable
   TransactionsTableName:
     Value: !Ref TransactionsTable
+  ProductAssetsBucketName:
+    Value: !Ref ProductAssetsBucket

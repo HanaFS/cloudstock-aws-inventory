@@ -1,22 +1,25 @@
-import os
 import re
 from datetime import datetime, timezone
 
 from boto3.dynamodb.conditions import Attr
 
-from ..common.dynamodb import dynamodb, is_conditional_failure, scan_all, scan_page
+from ..common.dynamodb import dynamodb, is_conditional_failure, scan_all, scan_page, table_name
 from ..common.http import ApiError, parse_body, require_any_group, success, with_error_handling
 
 PRODUCT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _table(name):
-    return dynamodb.Table(os.environ[name])
+    return dynamodb.Table(table_name(name))
 
 
 def _validate_product(input_data, existing, product_id):
-    if input_data.get("imageUrl") not in (None, ""):
-        raise ApiError(400, "UPLOAD_REQUIRED", "Hãy tải ảnh lên S3 và gửi imageKey; không gửi URL hoặc Base64 trong request.")
+    input_data = dict(input_data)
+    if "quantity" in input_data:
+        quantity = input_data.pop("quantity")
+        if "stockQuantity" in input_data and input_data["stockQuantity"] != quantity:
+            raise ApiError(400, "CONFLICTING_QUANTITY", "quantity và stockQuantity phải có cùng giá trị.")
+        input_data["stockQuantity"] = quantity
     values = {**(existing or {}), **input_data, "productId": product_id}
     if not isinstance(product_id, str) or not PRODUCT_ID_PATTERN.fullmatch(product_id):
         raise ApiError(400, "INVALID_PRODUCT_ID", "productId không hợp lệ.")
@@ -26,61 +29,75 @@ def _validate_product(input_data, existing, product_id):
         raise ApiError(400, "INVALID_NAME", "Tên sản phẩm là bắt buộc và tối đa 200 ký tự.")
     if not category or len(category) > 100:
         raise ApiError(400, "INVALID_CATEGORY", "Danh mục là bắt buộc và tối đa 100 ký tự.")
-    for field in ("price", "quantity", "minThreshold"):
+    for field in ("price", "stockQuantity", "minThreshold"):
         value = values.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ApiError(400, f"INVALID_{field.upper()}", f"{field} phải là số nguyên không âm.")
+            error_field = "STOCK_QUANTITY" if field == "stockQuantity" else field.upper()
+            raise ApiError(400, f"INVALID_{error_field}", f"{field} phải là số nguyên không âm.")
     supplier_id = values.get("supplierId") or None
     if supplier_id is not None and (not isinstance(supplier_id, str) or len(supplier_id) > 64):
         raise ApiError(400, "INVALID_SUPPLIER_ID", "supplierId không hợp lệ.")
-    image_key = values.get("imageKey") or None
-    if image_key is not None and (not isinstance(image_key, str) or len(image_key) > 1024):
-        raise ApiError(400, "INVALID_IMAGE_KEY", "imageKey không hợp lệ.")
+    image_url = values.get("imageUrl") or None
+    if image_url is not None and (
+        not isinstance(image_url, str)
+        or len(image_url) > 2048
+        or not image_url.startswith("https://")
+    ):
+        raise ApiError(400, "INVALID_IMAGE_URL", "imageUrl phải là URL HTTPS hợp lệ.")
     return {
         "productId": product_id,
         "name": name,
         "category": category,
         "price": values["price"],
-        "quantity": values["quantity"],
+        "stockQuantity": values["stockQuantity"],
         "minThreshold": values["minThreshold"],
+        "status": "IN_STOCK" if values["stockQuantity"] > 0 else "OUT_OF_STOCK",
         "supplierId": supplier_id,
-        "imageKey": image_key,
+        "imageUrl": image_url,
         "updatedAt": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
     }
 
 
 def _serialize_product(product):
+    qty = product.get("stockQuantity")
+    if qty is None:
+        qty = product.get("quantity", 0)
+    status = product.get("status") or ("IN_STOCK" if int(qty) > 0 else "OUT_OF_STOCK")
     return {
         "productId": product["productId"],
-        "name": product["name"],
-        "category": product["category"],
-        "price": product["price"],
-        "quantity": product["quantity"],
-        "minThreshold": product["minThreshold"],
+        "name": product.get("name", ""),
+        "category": product.get("category", "Chưa phân loại"),
+        "price": product.get("price", 0),
+        "quantity": qty,
+        "minThreshold": product.get("minThreshold", 5),
+        "status": status,
         "supplierId": product.get("supplierId"),
-        "imageKey": product.get("imageKey"),
         "imageUrl": product.get("imageUrl"),
         "updatedAt": product.get("updatedAt"),
     }
 
 
 def _assert_supplier_exists(supplier_id):
-    if supplier_id and not _table("SUPPLIERS_TABLE").get_item(Key={"supplierId": supplier_id}).get("Item"):
+    if supplier_id and not _table("TABLE_SUPPLIERS").get_item(Key={"supplierId": supplier_id}).get("Item"):
         raise ApiError(400, "UNKNOWN_SUPPLIER", "Nhà cung cấp không tồn tại.")
 
 
 @with_error_handling
 def handler(event, context=None):
     require_any_group(event, ["Admin", "Staff"])
-    products = _table("PRODUCTS_TABLE")
+    products = _table("TABLE_PRODUCTS")
     method = event.get("httpMethod")
     product_id = (event.get("pathParameters") or {}).get("productId")
 
     if method == "GET" and not product_id:
         params = event.get("queryStringParameters") or {}
-        filter_expression = Attr("quantity").lt(Attr("minThreshold")) if params.get("filter") == "low-stock" else None
-        page = scan_page(products, event, "productId", filter_expression)
-        return success([_serialize_product(item) for item in page["items"]], extra={"nextToken": page["nextToken"]} if page["nextToken"] else None)
+        items = scan_all(products)
+        if params.get("filter") == "low-stock":
+            items = [
+                item for item in items
+                if int(item.get("stockQuantity") if item.get("stockQuantity") is not None else item.get("quantity", 0)) < int(item.get("minThreshold", 0))
+            ]
+        return success([_serialize_product(item) for item in items])
     if method == "GET" and product_id:
         item = products.get_item(Key={"productId": product_id}).get("Item")
         if not item:
@@ -124,7 +141,7 @@ def handler(event, context=None):
         if not products.get_item(Key={"productId": product_id}).get("Item"):
             raise ApiError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm.")
         history = scan_all(
-            _table("TRANSACTIONS_TABLE"),
+            _table("TABLE_TRANSACTIONS"),
             FilterExpression=Attr("productId").eq(product_id),
             ProjectionExpression="transactionId",
         )

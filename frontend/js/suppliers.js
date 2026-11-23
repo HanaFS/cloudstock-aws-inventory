@@ -306,3 +306,4 @@
     closeDeleteModal,
   };
 })();
+window.SuppliersModule = SuppliersModule

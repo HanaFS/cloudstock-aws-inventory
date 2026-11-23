@@ -8,12 +8,28 @@ from urllib.parse import parse_qs, unquote, urlsplit
 MAX_BODY_BYTES = 1024 * 1024
 LOCAL_FRONTEND_ORIGIN = "http://localhost:8080"
 _COLLECTION = re.compile(r"^/(products|suppliers|transactions)$")
-_ITEM = re.compile(r"^/(products|suppliers|transactions)/([^/]+)$")
+_ITEM = re.compile(r"^/(products|suppliers|transactions|users)/([^/]+)$")
 
 
 def resolve_route(method, pathname):
     if method == "GET" and pathname == "/health":
         return "health", {}
+    if pathname in ("/dashboard", "/dashboard/stats") and method == "GET":
+        return "dashboard", {}
+    if pathname == "/logs" and method == "GET":
+        return "logs", {}
+    if pathname == "/products/upload-url" and method == "POST":
+        return "products", {}
+    if pathname == "/transactions/invoice-upload-url" and method == "POST":
+        return "transactions", {}
+    invoice = re.fullmatch(r"^/transactions/([^/]+)/invoice-url$", pathname)
+    if invoice and method == "GET":
+        return "transactions", {"transactionId": unquote(invoice.group(1))}
+    if pathname == "/users" and method in ("GET", "POST"):
+        return "users", {}
+    password_reset = re.fullmatch(r"^/users/([^/]+)/reset-password$", pathname)
+    if password_reset and method == "POST":
+        return "users", {"userId": unquote(password_reset.group(1))}
     collection = _COLLECTION.fullmatch(pathname)
     if collection:
         resource = collection.group(1)
@@ -28,8 +44,11 @@ def resolve_route(method, pathname):
         "products": "productId",
         "suppliers": "supplierId",
         "transactions": "transactionId",
+        "users": "userId",
     }[resource]
     allowed = ("GET",) if resource == "transactions" else ("GET", "PUT", "DELETE")
+    if resource == "users":
+        allowed = ("GET", "PUT", "DELETE")
     if method not in allowed:
         return None
     try:
@@ -63,12 +82,29 @@ def configure_local_environment(env=None):
         or parsed.hostname not in ("localhost", "127.0.0.1")
     ):
         raise ValueError("Local API chỉ cho phép DynamoDB Local trên localhost:8000.")
+    for variable, ports in (
+        ("S3_ENDPOINT", {4566, 9000}),
+        ("COGNITO_ENDPOINT", {4566}),
+        ("CLOUDWATCH_ENDPOINT", {4566}),
+    ):
+        endpoint = env.get(variable)
+        if not endpoint:
+            continue
+        service = urlsplit(endpoint)
+        if (
+            service.scheme != "http"
+            or service.hostname not in ("localhost", "127.0.0.1")
+            or service.port not in ports
+        ):
+            allowed = ", ".join(str(port) for port in sorted(ports))
+            raise ValueError(f"{variable} chỉ được trỏ tới localhost trên cổng {allowed}.")
     env["DYNAMODB_ENDPOINT"] = endpoint
     env["STAGE"] = "dev"
+    env["LOCAL_API"] = "true"
     env["FRONTEND_ORIGIN"] = LOCAL_FRONTEND_ORIGIN
-    env.setdefault("PRODUCTS_TABLE", "cloudstock-dev-products")
-    env.setdefault("SUPPLIERS_TABLE", "cloudstock-dev-suppliers")
-    env.setdefault("TRANSACTIONS_TABLE", "cloudstock-dev-transactions")
+    env["TABLE_PRODUCTS"] = "cloudstock-dev-products"
+    env["TABLE_SUPPLIERS"] = "cloudstock-dev-suppliers"
+    env["TABLE_TRANSACTIONS"] = "cloudstock-dev-transactions"
     return env
 
 
@@ -79,16 +115,21 @@ class LocalApiServer(ThreadingHTTPServer):
 
 def create_local_api_server(handlers=None, frontend_origin=LOCAL_FRONTEND_ORIGIN):
     if handlers is None:
+        from src.catalog import handler as catalog_handler
+        from src.dashboard import handler as dashboard_handler
         from src.health import handler as health_handler
-        from src.products import handler as products_handler
-        from src.suppliers import handler as suppliers_handler
+        from src.logs import handler as logs_handler
         from src.transactions import handler as transactions_handler
+        from src.users import handler as users_handler
 
         handlers = {
             "health": health_handler,
-            "products": products_handler,
-            "suppliers": suppliers_handler,
+            "products": catalog_handler,
+            "suppliers": catalog_handler,
             "transactions": transactions_handler,
+            "users": users_handler,
+            "dashboard": dashboard_handler,
+            "logs": logs_handler,
         }
 
     class RequestHandler(BaseHTTPRequestHandler):

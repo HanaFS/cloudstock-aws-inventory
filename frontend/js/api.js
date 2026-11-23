@@ -781,3 +781,4 @@ const ApiService = (() => {
     Auth,
   };
 })();
+window.ApiService = ApiService;

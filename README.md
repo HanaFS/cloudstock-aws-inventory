@@ -16,5 +16,5 @@ Sau đó mở `http://localhost:8080`.
 
 ## Tài liệu backend
 
-- [Hợp đồng API và mô hình dữ liệu](backend/API_CONTRACT.md)
+- [Hợp đồng API và đối chiếu cấu trúc Cloud](backend/API_CONTRACT.md)
 - [Khung backend AWS SAM](backend/README.md)

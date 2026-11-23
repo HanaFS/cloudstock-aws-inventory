@@ -510,4 +510,5 @@ const ProductsModule = (() => {
     closeDeleteModal,
   };
 })();
+window.ProductsModule = ProductsModule
 
