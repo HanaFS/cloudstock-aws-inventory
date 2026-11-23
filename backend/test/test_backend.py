@@ -2,6 +2,7 @@ import json
 import os
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import patch
 
 from scripts.local_api import configure_local_environment, create_local_api_server, resolve_route
@@ -144,7 +145,7 @@ class TransactionHandlerTests(unittest.TestCase):
     def test_transaction_builds_atomic_stock_update_and_ignores_client_identity(self):
         transactions = FakeTable()
         products = FakeTable({("prod-001",): {
-            "productId": "prod-001", "name": "Paper", "stockQuantity": 10,
+            "productId": "prod-001", "name": "Paper", "stockQuantity": Decimal("10"),
         }})
         calls = []
 
@@ -155,7 +156,7 @@ class TransactionHandlerTests(unittest.TestCase):
         with patch("src.transactions.dynamodb", FakeDynamo(
             {"transactions": transactions, "products": products, "suppliers": FakeTable()},
             FakeClient(),
-        )):
+        )), patch("src.transactions._client", return_value=FakeClient()):
             from src.transactions import handler
 
             result = handler(event("POST", {
@@ -227,7 +228,7 @@ class TransactionHandlerTests(unittest.TestCase):
                 "suppliers": FakeTable({("sup-001",): {"supplierId": "sup-001"}}),
             },
             FakeClient(),
-        )):
+        )), patch("src.transactions._client", return_value=FakeClient()):
             from src.transactions import handler
 
             result = handler(event("POST", {

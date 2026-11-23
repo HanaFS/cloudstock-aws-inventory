@@ -1,8 +1,11 @@
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
+from decimal import Decimal
 
+import boto3
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 
@@ -18,7 +21,19 @@ def _table(logical_name):
 
 
 def _client():
-    return dynamodb.meta.client
+    options = {
+        "region_name": os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-east-1"
+    }
+    endpoint = os.environ.get("DYNAMODB_ENDPOINT")
+    if endpoint:
+        options.update(
+            endpoint_url=endpoint,
+            aws_access_key_id="local",
+            aws_secret_access_key="local",
+        )
+    return boto3.client("dynamodb", **options)
 
 
 def _validate_transaction(input_data):
@@ -195,7 +210,14 @@ def handler(event, context=None):
         if not product:
             raise ApiError(404, "PRODUCT_NOT_FOUND", "Không tìm thấy sản phẩm.")
         stock = product.get("stockQuantity")
-        if isinstance(stock, bool) or not isinstance(stock, int) or stock < 0:
+        valid_stock = (
+            isinstance(stock, int) and not isinstance(stock, bool)
+        ) or (
+            isinstance(stock, Decimal)
+            and stock.is_finite()
+            and stock == stock.to_integral_value()
+        )
+        if not valid_stock or stock < 0:
             raise ApiError(409, "INVALID_STOCK_STATE", "Tồn kho sản phẩm không hợp lệ.")
         quantity = transaction_input["quantity"]
         importing = transaction_input["type"] == "IMPORT"

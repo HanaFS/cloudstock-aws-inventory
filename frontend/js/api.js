@@ -150,6 +150,7 @@ const ApiService = (() => {
     async create(product) {
       if (_usesMockData("products")) return _mockCreate("products", product);
       const payload = {
+        productId: product.productId,
         name: product.name,
         category: product.category,
         price: Number(product.price) || 0,
@@ -222,6 +223,7 @@ const ApiService = (() => {
     async create(supplier) {
       if (_usesMockData("suppliers")) return _mockCreate("suppliers", supplier);
       const payload = {
+        supplierId: supplier.supplierId,
         name: supplier.name,
         phone: supplier.phone || "",
         address: supplier.address || "",
@@ -487,6 +489,22 @@ const ApiService = (() => {
   }
 
   function userFromIdToken(token) {
+    if (typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API_AUTH) {
+      const match = /^local-dev:(Admin|Staff)$/.exec(token || "");
+      if (match) {
+        const role = match[1];
+        return {
+          id: `local-${role.toLowerCase()}`,
+          username: role === "Admin" ? "admin" : "staff",
+          fullName: role === "Admin" ? "Local Admin" : "Local Staff",
+          email: role === "Admin" ? "admin@cloudstock.local" : "staff@cloudstock.local",
+          role,
+          status: "ACTIVE",
+        };
+      }
+      return null;
+    }
+
     try {
       const claims = decodeIdToken(token);
       if (
@@ -531,6 +549,32 @@ const ApiService = (() => {
 
   const Auth = {
     async login(username, password) {
+      if (typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API_AUTH) {
+        const normalizedUsername = username.trim().toLowerCase();
+        const role =
+          normalizedUsername === "admin" || normalizedUsername === "admin@cloudstock.local"
+            ? "Admin"
+            : normalizedUsername === "staff" || normalizedUsername === "staff@cloudstock.local"
+              ? "Staff"
+              : null;
+        if (!role || password !== "123456") {
+          throw new Error("Tài khoản local không tồn tại hoặc mật khẩu không đúng.");
+        }
+        const token = `local-dev:${role}`;
+        const user = {
+          id: `local-${role.toLowerCase()}`,
+          username: role === "Admin" ? "admin" : "staff",
+          fullName: role === "Admin" ? "Local Admin" : "Local Staff",
+          email: role === "Admin" ? "admin@cloudstock.local" : "staff@cloudstock.local",
+          role,
+          status: "ACTIVE",
+        };
+        localStorage.setItem("id_token", token);
+        localStorage.setItem("cloudstock_id_token", token);
+        localStorage.setItem("cloudstock_current_user", JSON.stringify(user));
+        return _wrapResponse({ user, token });
+      }
+
       if (typeof CONFIG !== "undefined" && CONFIG.USE_MOCK_AUTH && typeof MockDataStore !== "undefined") {
         await _delay();
         const users = MockDataStore.getAll("users");
