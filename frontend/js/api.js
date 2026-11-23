@@ -291,23 +291,18 @@ const ApiService = (() => {
         return _wrapResponse(created);
       }
 
-      const isImport = transaction.type === "IN" || transaction.type === "IMPORT";
-      const payload = isImport
-        ? {
-            type: "IMPORT",
-            productId: transaction.productId,
-            quantity: Number(transaction.amount ?? transaction.quantity) || 0,
-            supplierId: transaction.supplierId || null,
-            invoiceUrl: transaction.invoiceUrl || transaction.attachedInvoiceName || null,
-          }
-        : {
-            type: "EXPORT",
-            productId: transaction.productId,
-            quantity: Number(transaction.amount ?? transaction.quantity) || 0,
-            reason: transaction.reason || transaction.fullReason || "Xuất kho",
-          };
+      const payload = {
+        type: transaction.type,                                                          
+        productId: transaction.productId,
+        amount: Number(transaction.amount ?? transaction.quantity) || 0,                 
+        supplierId: transaction.supplierId || null,
+        reason: transaction.reason || transaction.fullReason || (transaction.type === "IN" ? "Nhập kho" : "Xuất kho"),
+        invoiceKey: transaction.invoiceKey || null,                                      
+      };
 
-      const res = await _fetchAPI("POST", "/transactions", payload);
+      const res = await _fetchAPI("POST", "/transactions", payload, {
+        "Idempotency-Key": crypto.randomUUID(),                                          
+      });
       return _wrapResponse(res);
     },
 
