@@ -13,7 +13,8 @@ the functions to the already-existing AWS resources.
   page exists. `limit` is 1–100 (default 100), except Cognito users are capped
   at 60 per Cognito API limit.
 - `GET /health` is public. Other APIs require Cognito `Admin` or `Staff`.
-  `GET|POST|PUT|DELETE /users` routes and `GET /logs` require `Admin`.
+  User administration and `GET /logs` require `Admin`; `Staff` may update
+  their own email and name only.
 - `POST /transactions` requires `Idempotency-Key` (1–128 characters).
 - Local adapter auth accepts only `Bearer local-dev:Admin` or
   `Bearer local-dev:Staff`.
@@ -40,7 +41,7 @@ the functions to the already-existing AWS resources.
 | `GET /users` | List Cognito users; supports pagination. |
 | `POST /users` | Create Cognito user and assign `Admin` or `Staff` group. Cognito emails the temporary password. |
 | `GET /users/{userId}` | Read user by Cognito username or `sub`. |
-| `PUT /users/{userId}` | Update email/name, group role, or enabled status. |
+| `PUT /users/{userId}` | Admin updates email/name, group role, or enabled status; any user may update only their own email/name. |
 | `DELETE /users/{userId}` | Delete Cognito user; self-delete is denied. |
 | `POST /users/{userId}/reset-password` | Ask Cognito to send a password-reset email. |
 | `GET /logs` | Read configured CloudWatch Lambda log groups; defaults to the last 7 days. |

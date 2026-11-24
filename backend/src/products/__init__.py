@@ -59,14 +59,18 @@ def _validate_product(input_data, existing, product_id):
 
 
 def _serialize_product(product):
+    qty = product.get("stockQuantity")
+    if qty is None:
+        qty = product.get("quantity", 0)
+    status = product.get("status") or ("IN_STOCK" if int(qty) > 0 else "OUT_OF_STOCK")
     return {
         "productId": product["productId"],
-        "name": product["name"],
-        "category": product["category"],
-        "price": product["price"],
-        "quantity": product["stockQuantity"],
-        "minThreshold": product["minThreshold"],
-        "status": product["status"],
+        "name": product.get("name", ""),
+        "category": product.get("category", "Chưa phân loại"),
+        "price": product.get("price", 0),
+        "quantity": qty,
+        "minThreshold": product.get("minThreshold", 5),
+        "status": status,
         "supplierId": product.get("supplierId"),
         "imageUrl": product.get("imageUrl"),
         "updatedAt": product.get("updatedAt"),
@@ -87,9 +91,13 @@ def handler(event, context=None):
 
     if method == "GET" and not product_id:
         params = event.get("queryStringParameters") or {}
-        filter_expression = Attr("stockQuantity").lt(Attr("minThreshold")) if params.get("filter") == "low-stock" else None
-        page = scan_page(products, event, "productId", filter_expression)
-        return success([_serialize_product(item) for item in page["items"]], extra={"nextToken": page["nextToken"]} if page["nextToken"] else None)
+        items = scan_all(products)
+        if params.get("filter") == "low-stock":
+            items = [
+                item for item in items
+                if int(item.get("stockQuantity") if item.get("stockQuantity") is not None else item.get("quantity", 0)) < int(item.get("minThreshold", 0))
+            ]
+        return success([_serialize_product(item) for item in items])
     if method == "GET" and product_id:
         item = products.get_item(Key={"productId": product_id}).get("Item")
         if not item:

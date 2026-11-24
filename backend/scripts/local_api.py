@@ -74,8 +74,8 @@ def local_claims(authorization):
 
 def configure_local_environment(env=None):
     env = os.environ if env is None else env
-    endpoint = env.get("DYNAMODB_ENDPOINT", "http://127.0.0.1:8000")
-    parsed = urlsplit(endpoint)
+    dynamodb_endpoint = env.get("DYNAMODB_ENDPOINT", "http://127.0.0.1:8000")
+    parsed = urlsplit(dynamodb_endpoint)
     if (
         parsed.scheme != "http"
         or parsed.port != 8000
@@ -98,7 +98,7 @@ def configure_local_environment(env=None):
         ):
             allowed = ", ".join(str(port) for port in sorted(ports))
             raise ValueError(f"{variable} chỉ được trỏ tới localhost trên cổng {allowed}.")
-    env["DYNAMODB_ENDPOINT"] = endpoint
+    env["DYNAMODB_ENDPOINT"] = dynamodb_endpoint
     env["STAGE"] = "dev"
     env["LOCAL_API"] = "true"
     env["FRONTEND_ORIGIN"] = LOCAL_FRONTEND_ORIGIN

@@ -55,15 +55,30 @@ const ApiService = (() => {
   }
 
   async function _fetchAllPages(path) {
-    const response = await _fetchAPI("GET", path);
     let items = [];
-    if (Array.isArray(response)) {
-      items = response;
-    } else if (response && Array.isArray(response.data)) {
-      items = response.data;
-    } else if (response && typeof response === "object") {
-      items = [response];
-    }
+    let nextToken = null;
+
+    do {
+      const separator = path.includes("?") ? "&" : "?";
+      const pagePath = nextToken
+        ? `${path}${separator}nextToken=${encodeURIComponent(nextToken)}`
+        : path;
+      const response = await _fetchAPI("GET", pagePath);
+
+      if (Array.isArray(response)) {
+        items.push(...response);
+        nextToken = null;
+      } else if (response && Array.isArray(response.data)) {
+        items.push(...response.data);
+        nextToken = response.nextToken || null;
+      } else if (response && typeof response === "object") {
+        items.push(response);
+        nextToken = null;
+      } else {
+        nextToken = null;
+      }
+    } while (nextToken);
+
     return _wrapResponse(items);
   }
 
@@ -78,6 +93,65 @@ const ApiService = (() => {
     transactions: "transactionId",
     systemLogs: "timestamp",
   };
+
+  const LOCAL_USERS_STORAGE_KEY = "cloudstock_local_users";
+
+  function _usesLocalUserDirectory() {
+    return typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API_AUTH;
+  }
+
+  function _getLocalUsers() {
+    const stored = localStorage.getItem(LOCAL_USERS_STORAGE_KEY);
+    if (stored === null) {
+      const initialUsers = [
+        {
+          id: "local-admin",
+          username: "admin",
+          fullName: "Local Admin",
+          email: "admin@cloudstock.local",
+          role: "Admin",
+          status: "ACTIVE",
+        },
+        {
+          id: "local-staff",
+          username: "staff",
+          fullName: "Local Staff",
+          email: "staff@cloudstock.local",
+          role: "Staff",
+          status: "ACTIVE",
+        },
+      ];
+      localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(initialUsers));
+      return initialUsers;
+    }
+
+    let users;
+    try {
+      users = JSON.parse(stored);
+    } catch {
+      throw new Error("Dữ liệu người dùng local bị lỗi, hãy xóa khóa cloudstock_local_users trong Local Storage.");
+    }
+    if (!Array.isArray(users)) {
+      throw new Error("Dữ liệu người dùng local không hợp lệ.");
+    }
+    return users;
+  }
+
+  function _saveLocalUsers(users) {
+    localStorage.setItem(LOCAL_USERS_STORAGE_KEY, JSON.stringify(users));
+  }
+
+  function _matchesLocalUser(user, userId) {
+    return (
+      user.id === userId ||
+      user.username === userId ||
+      user.email === userId
+    );
+  }
+
+  function _findLocalUser(users, userId) {
+    return users.find((user) => _matchesLocalUser(user, userId));
+  }
 
   async function _mockGetAll(collection) {
     if (typeof MockDataStore === "undefined") return _wrapResponse([]);
@@ -150,6 +224,7 @@ const ApiService = (() => {
     async create(product) {
       if (_usesMockData("products")) return _mockCreate("products", product);
       const payload = {
+        productId: product.productId,
         name: product.name,
         category: product.category,
         price: Number(product.price) || 0,
@@ -222,6 +297,7 @@ const ApiService = (() => {
     async create(supplier) {
       if (_usesMockData("suppliers")) return _mockCreate("suppliers", supplier);
       const payload = {
+        supplierId: supplier.supplierId,
         name: supplier.name,
         phone: supplier.phone || "",
         address: supplier.address || "",
@@ -291,23 +367,18 @@ const ApiService = (() => {
         return _wrapResponse(created);
       }
 
-      const isImport = transaction.type === "IN" || transaction.type === "IMPORT";
-      const payload = isImport
-        ? {
-            type: "IMPORT",
-            productId: transaction.productId,
-            quantity: Number(transaction.amount ?? transaction.quantity) || 0,
-            supplierId: transaction.supplierId || null,
-            invoiceUrl: transaction.invoiceUrl || transaction.attachedInvoiceName || null,
-          }
-        : {
-            type: "EXPORT",
-            productId: transaction.productId,
-            quantity: Number(transaction.amount ?? transaction.quantity) || 0,
-            reason: transaction.reason || transaction.fullReason || "Xuất kho",
-          };
+      const payload = {
+        type: transaction.type,                                                          
+        productId: transaction.productId,
+        amount: Number(transaction.amount ?? transaction.quantity) || 0,                 
+        supplierId: transaction.supplierId || null,
+        reason: transaction.reason || transaction.fullReason || (transaction.type === "IN" ? "Nhập kho" : "Xuất kho"),
+        invoiceKey: transaction.invoiceKey || null,                                      
+      };
 
-      const res = await _fetchAPI("POST", "/transactions", payload);
+      const res = await _fetchAPI("POST", "/transactions", payload, {
+        "Idempotency-Key": crypto.randomUUID(),                                          
+      });
       return _wrapResponse(res);
     },
 
@@ -318,6 +389,7 @@ const ApiService = (() => {
 
   const Users = {
     async getAll() {
+      if (_usesLocalUserDirectory()) return _wrapResponse(_getLocalUsers());
       if (_usesMockData("users")) return _mockGetAll("users");
       const res = await _fetchAllPages("/users");
       const list = Array.isArray(res.data) ? res.data : [];
@@ -342,27 +414,80 @@ const ApiService = (() => {
     },
 
     async create(user) {
+      if (_usesLocalUserDirectory()) {
+        const users = _getLocalUsers();
+        const username = user.username.trim();
+        const email = user.email.trim();
+        if (
+          users.some(
+            (existing) =>
+              (existing.username || "").toLowerCase() === username.toLowerCase() ||
+              (existing.email || "").toLowerCase() === email.toLowerCase()
+          )
+        ) {
+          throw new Error("Tên đăng nhập hoặc email đã tồn tại.");
+        }
+        const created = {
+          ...user,
+          id: user.id || `local-${Date.now().toString(36)}`,
+          username,
+          email,
+          role: user.role === "Warehouse Staff" ? "Staff" : (user.role || "Staff"),
+          createdAt: new Date().toISOString(),
+        };
+        _saveLocalUsers([...users, created]);
+        return _wrapResponse(created);
+      }
       if (_usesMockData("users")) return _mockCreate("users", user);
       const payload = {
+        username: user.username,
+        fullName: user.fullName,
         email: user.email,
-        password: user.password || "Staff@123",
-        role: user.role || "Staff",
+        role: user.role === "Warehouse Staff" ? "Staff" : (user.role || "Staff"),
       };
       const res = await _fetchAPI("POST", "/users", payload);
-      return _wrapResponse(res);
+      return _wrapResponse((res && res.data) ? res.data : res);
     },
 
     async update(userId, updates) {
-      if (_usesMockData("users")) return _mockUpdate("users", userId, updates);
-      if (updates.role) {
-        const username = userId.includes("@") ? userId : userId;
-        const res = await _fetchAPI("PUT", `/users/${encodeURIComponent(username)}/role`, { role: updates.role });
-        return _wrapResponse(res);
+      if (_usesLocalUserDirectory()) {
+        const users = _getLocalUsers();
+        const index = users.findIndex((user) => _matchesLocalUser(user, userId));
+        if (index < 0) throw new Error(`Không tìm thấy người dùng: ${userId}`);
+        users[index] = { ...users[index], ...updates };
+        _saveLocalUsers(users);
+        return _wrapResponse(users[index]);
       }
-      return _wrapResponse({ message: "Updated" });
+      if (_usesMockData("users")) return _mockUpdate("users", userId, updates);
+      const res = await _fetchAPI("PUT", `/users/${encodeURIComponent(userId)}`, updates);
+      return _wrapResponse((res && res.data) ? res.data : res);
+    },
+
+    async resetPassword(userId) {
+      if (_usesLocalUserDirectory()) {
+        if (!_findLocalUser(_getLocalUsers(), userId)) {
+          throw new Error(`Không tìm thấy người dùng: ${userId}`);
+        }
+        return _wrapResponse({ passwordResetRequested: true });
+      }
+      if (_usesMockData("users")) return _wrapResponse({ passwordResetRequested: true });
+      const res = await _fetchAPI(
+        "POST",
+        `/users/${encodeURIComponent(userId)}/reset-password`
+      );
+      return _wrapResponse((res && res.data) ? res.data : res);
     },
 
     async delete(userId) {
+      if (_usesLocalUserDirectory()) {
+        const users = _getLocalUsers();
+        const filtered = users.filter((user) => !_matchesLocalUser(user, userId));
+        if (filtered.length === users.length) {
+          throw new Error(`Không tìm thấy người dùng: ${userId}`);
+        }
+        _saveLocalUsers(filtered);
+        return _wrapResponse({ deleted: true });
+      }
       if (_usesMockData("users")) return _mockDelete("users", userId);
       const res = await _fetchAPI("DELETE", `/users/${encodeURIComponent(userId)}`);
       return _wrapResponse(res || { message: "Deleted" });
@@ -492,6 +617,22 @@ const ApiService = (() => {
   }
 
   function userFromIdToken(token) {
+    if (typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API_AUTH) {
+      const match = /^local-dev:(Admin|Staff)$/.exec(token || "");
+      if (match) {
+        const role = match[1];
+        return {
+          id: `local-${role.toLowerCase()}`,
+          username: role === "Admin" ? "admin" : "staff",
+          fullName: role === "Admin" ? "Local Admin" : "Local Staff",
+          email: role === "Admin" ? "admin@cloudstock.local" : "staff@cloudstock.local",
+          role,
+          status: "ACTIVE",
+        };
+      }
+      return null;
+    }
+
     try {
       const claims = decodeIdToken(token);
       if (
@@ -536,6 +677,32 @@ const ApiService = (() => {
 
   const Auth = {
     async login(username, password) {
+      if (typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API_AUTH) {
+        const normalizedUsername = username.trim().toLowerCase();
+        const role =
+          normalizedUsername === "admin" || normalizedUsername === "admin@cloudstock.local"
+            ? "Admin"
+            : normalizedUsername === "staff" || normalizedUsername === "staff@cloudstock.local"
+              ? "Staff"
+              : null;
+        if (!role || password !== "123456") {
+          throw new Error("Tài khoản local không tồn tại hoặc mật khẩu không đúng.");
+        }
+        const token = `local-dev:${role}`;
+        const user = {
+          id: `local-${role.toLowerCase()}`,
+          username: role === "Admin" ? "admin" : "staff",
+          fullName: role === "Admin" ? "Local Admin" : "Local Staff",
+          email: role === "Admin" ? "admin@cloudstock.local" : "staff@cloudstock.local",
+          role,
+          status: "ACTIVE",
+        };
+        localStorage.setItem("id_token", token);
+        localStorage.setItem("cloudstock_id_token", token);
+        localStorage.setItem("cloudstock_current_user", JSON.stringify(user));
+        return _wrapResponse({ user, token });
+      }
+
       if (typeof CONFIG !== "undefined" && CONFIG.USE_MOCK_AUTH && typeof MockDataStore !== "undefined") {
         await _delay();
         const users = MockDataStore.getAll("users");
@@ -786,3 +953,4 @@ const ApiService = (() => {
     Auth,
   };
 })();
+window.ApiService = ApiService;

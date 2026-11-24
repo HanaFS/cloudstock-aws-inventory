@@ -11,10 +11,11 @@ Parameters:
       - prod
   FrontendOrigin:
     Type: String
-    Default: http://localhost:8080
+    Default: https://d7omav63h53i1.cloudfront.net
     Description: Exact frontend origin allowed by API CORS.
   CognitoDomainPrefix:
     Type: String
+    Default: cloudstock-nhom4-202600
     AllowedPattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
     ConstraintDescription: Use 1-63 lowercase letters, numbers, or hyphens; do not start or end with a hyphen.
     Description: Globally unique prefix for the Cognito Hosted UI domain.
@@ -27,8 +28,8 @@ Conditions:
 Globals:
   Function:
     Runtime: python3.13
-    Timeout: 10
-    MemorySize: 128
+    Timeout: 30
+    MemorySize: 512
     Environment:
       Variables:
         STAGE: !Ref Stage
@@ -106,14 +107,28 @@ Resources:
       EndpointConfiguration: REGIONAL
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt CloudStockUserPool.Arn
       Cors:
         AllowOrigin: !Sub "'${FrontendOrigin}'"
-        AllowHeaders: "'Content-Type,Authorization,Idempotency-Key'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Idempotency-Key'"
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         MaxAge: "'600'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: !Sub "'${FrontendOrigin}'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization,Idempotency-Key'"
+              Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
   HealthFunction:
     Type: AWS::Serverless::Function
@@ -336,7 +351,7 @@ Resources:
               Action:
                 - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminGetUser
-                - cognito-idp:AdminListUsers
+                - cognito-idp:ListUsers
                 - cognito-idp:AdminUpdateUserAttributes
                 - cognito-idp:AdminEnableUser
                 - cognito-idp:AdminDisableUser

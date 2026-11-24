@@ -4,6 +4,7 @@ const AuthModule = (() => {
   let filterKeyword = "";
   let filterRole = "ALL";
   let filterStatus = "ALL";
+  let isCreatingUser = false;
 
   function showToast(message, type = "info") {
     let container = document.getElementById("toast-container");
@@ -184,7 +185,70 @@ const AuthModule = (() => {
     }
   }
 
-   
+  function openProfileEditModal() {
+    const user = ApiService.Auth.getCurrentUser();
+    if (!user) return;
+
+    document.getElementById("edit-profile-fullname").value = user.fullName || "";
+    document.getElementById("edit-profile-email").value = user.email || "";
+    document.getElementById("modal-edit-profile")?.classList.add("visible");
+  }
+
+  function closeProfileEditModal() {
+    document.getElementById("modal-edit-profile")?.classList.remove("visible");
+  }
+
+  async function handleProfileUpdate(e) {
+    e.preventDefault();
+    const user = ApiService.Auth.getCurrentUser();
+    if (!user) {
+      showToast("Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.", "error");
+      return;
+    }
+
+    const fullName = document.getElementById("edit-profile-fullname").value.trim();
+    const email = document.getElementById("edit-profile-email").value.trim();
+    if (!fullName || fullName.length > 200 || !email || email.length > 320) {
+      showToast("Vui lòng nhập họ tên và email hợp lệ.", "warning");
+      return;
+    }
+
+    const submitButton = document.querySelector(
+      "#form-edit-profile button[type='submit']"
+    );
+    if (submitButton?.disabled) return;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang lưu...";
+    }
+
+    try {
+      const result = await ApiService.Users.update(user.id, { fullName, email });
+      const savedUser = result.data || {};
+      const updatedUser = {
+        ...user,
+        fullName: savedUser.fullName || fullName,
+        email: savedUser.email || email,
+      };
+      localStorage.setItem("cloudstock_current_user", JSON.stringify(updatedUser));
+      renderUserHeaderAndSidebar(updatedUser);
+      renderProfile();
+      closeProfileEditModal();
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? "Đã lưu hồ sơ trong chế độ local."
+          : "Đã cập nhật thông tin hồ sơ.",
+        "success"
+      );
+    } catch (err) {
+      showToast(`Lỗi cập nhật hồ sơ: ${err.message}`, "error");
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Lưu thay đổi";
+      }
+    }
+  }
 
 
   async function loadUserList() {
@@ -386,18 +450,16 @@ const AuthModule = (() => {
     const user = allUsers.find((u) => u.id === userId);
     if (!user) return;
 
-    showToast(
-      `Amazon Cognito: Đã gửi liên kết khôi phục mật khẩu đến email ${user.email}`,
-      "info"
-    );
-
-    if (typeof MockDataStore !== "undefined") {
-      MockDataStore.add("systemLogs", {
-        timestamp: new Date().toISOString(),
-        logStream: "lambda/authService",
-        level: "INFO",
-        message: `AdminResetUserPassword: Đã phát yêu cầu đặt lại mật khẩu cho user '${user.username}' qua Cognito User Pool.`,
-      });
+    try {
+      await ApiService.Users.resetPassword(userId);
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? `Đã mô phỏng đặt lại mật khẩu cho ${user.username} trong chế độ local`
+          : `Đã gửi yêu cầu đặt lại mật khẩu đến email ${user.email}`,
+        "success"
+      );
+    } catch (err) {
+      showToast(`Lỗi đặt lại mật khẩu: ${err.message}`, "error");
     }
   }
 
@@ -416,6 +478,8 @@ const AuthModule = (() => {
 
   async function handleCreateUser(e) {
     e.preventDefault();
+    if (isCreatingUser) return;
+
     const currentUser = ApiService.Auth.getCurrentUser();
     if (!currentUser || currentUser.role !== "Admin") {
       showToast("Chỉ Admin mới có quyền tạo tài khoản", "error");
@@ -439,6 +503,16 @@ const AuthModule = (() => {
       return;
     }
 
+    isCreatingUser = true;
+    const submitButton = document.querySelector(
+      "#form-create-user button[type='submit']"
+    );
+    const originalButtonText = submitButton ? submitButton.textContent : "";
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang tạo...";
+    }
+
     try {
       const newUser = {
         id: "u-" + Date.now().toString(36),
@@ -460,11 +534,22 @@ const AuthModule = (() => {
         });
       }
 
-      showToast(`Tạo tài khoản ${username} thành công (Cognito Simulated)`, "success");
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? `Đã thêm ${username} vào danh sách local (không tạo tài khoản Cognito)`
+          : `Tạo tài khoản ${username} thành công`,
+        "success"
+      );
       closeCreateUserModal();
       loadUserList();
     } catch (err) {
       showToast(`Lỗi tạo tài khoản: ${err.message}`, "error");
+    } finally {
+      isCreatingUser = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalButtonText;
+      }
     }
   }
 
@@ -525,6 +610,12 @@ const AuthModule = (() => {
        
       const formCreate = document.getElementById("form-create-user");
       if (formCreate) formCreate.addEventListener("submit", handleCreateUser);
+
+      const formProfile = document.getElementById("form-edit-profile");
+      if (formProfile && formProfile.dataset.submitBound !== "true") {
+        formProfile.addEventListener("submit", handleProfileUpdate);
+        formProfile.dataset.submitBound = "true";
+      }
     }
   }
 
@@ -539,6 +630,8 @@ const AuthModule = (() => {
     init,
     checkAuth,
     renderProfile,
+    openProfileEditModal,
+    closeProfileEditModal,
     loadUserList,
     toggleUserRole,
     toggleUserStatus,
@@ -548,3 +641,4 @@ const AuthModule = (() => {
     showToast,
   };
 })();
+window.AuthModule = AuthModule
