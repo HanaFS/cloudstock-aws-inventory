@@ -2,7 +2,10 @@ import json
 import os
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import patch
+
+from botocore.exceptions import ClientError
 
 from scripts.local_api import configure_local_environment, create_local_api_server, resolve_route
 from src.common.dynamodb import decode_cursor, encode_cursor
@@ -144,7 +147,7 @@ class TransactionHandlerTests(unittest.TestCase):
     def test_transaction_builds_atomic_stock_update_and_ignores_client_identity(self):
         transactions = FakeTable()
         products = FakeTable({("prod-001",): {
-            "productId": "prod-001", "name": "Paper", "stockQuantity": 10,
+            "productId": "prod-001", "name": "Paper", "stockQuantity": Decimal("10"),
         }})
         calls = []
 
@@ -155,7 +158,7 @@ class TransactionHandlerTests(unittest.TestCase):
         with patch("src.transactions.dynamodb", FakeDynamo(
             {"transactions": transactions, "products": products, "suppliers": FakeTable()},
             FakeClient(),
-        )):
+        )), patch("src.transactions._client", return_value=FakeClient()):
             from src.transactions import handler
 
             result = handler(event("POST", {
@@ -227,7 +230,7 @@ class TransactionHandlerTests(unittest.TestCase):
                 "suppliers": FakeTable({("sup-001",): {"supplierId": "sup-001"}}),
             },
             FakeClient(),
-        )):
+        )), patch("src.transactions._client", return_value=FakeClient()):
             from src.transactions import handler
 
             result = handler(event("POST", {
@@ -300,6 +303,157 @@ class CloudFeatureHandlerTests(unittest.TestCase):
         cognito.assert_not_called()
 
     @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_user_list_passes_limit_and_pagination_token_to_cognito(self):
+        class FakeCognito:
+            request = None
+
+            def list_users(self, **kwargs):
+                self.request = kwargs
+                return {"Users": [], "PaginationToken": "next-page"}
+
+        cognito = FakeCognito()
+        request = event("GET", claims={"cognito:groups": ["Admin"]}, query={
+            "limit": "25",
+            "nextToken": "current-page",
+        })
+        request["path"] = "/users"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler
+
+            result = handler(request)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(cognito.request, {
+            "UserPoolId": "pool-1",
+            "Limit": 25,
+            "PaginationToken": "current-page",
+        })
+        self.assertEqual(response_body(result)["nextToken"], "next-page")
+        self.assertEqual(
+            result["headers"]["Access-Control-Allow-Origin"],
+            "http://localhost:8080",
+        )
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_user_list_serializes_cognito_attributes_and_role(self):
+        class FakeCognito:
+            def list_users(self, **kwargs):
+                return {
+                    "Users": [{
+                        "Username": "staff.one",
+                        "Enabled": True,
+                        "Attributes": [
+                            {"Name": "sub", "Value": "12345678-1234-1234-1234-123456789012"},
+                            {"Name": "name", "Value": "Staff One"},
+                            {"Name": "email", "Value": "staff@example.test"},
+                        ],
+                    }]
+                }
+
+            def admin_list_groups_for_user(self, **kwargs):
+                self.username = kwargs["Username"]
+                return {"Groups": [{"GroupName": "Staff"}]}
+
+        cognito = FakeCognito()
+        request = event("GET", claims={"cognito:groups": ["Admin"]})
+        request["path"] = "/users"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler
+
+            result = handler(request)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(response_body(result)["data"], [{
+            "id": "12345678-1234-1234-1234-123456789012",
+            "username": "staff.one",
+            "fullName": "Staff One",
+            "email": "staff@example.test",
+            "role": "Staff",
+            "status": "ACTIVE",
+        }])
+        self.assertEqual(cognito.username, "staff.one")
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_create_user_maps_duplicate_username_and_email_alias(self):
+        for code in ("UsernameExistsException", "AliasExistsException"):
+            with self.subTest(code=code):
+                cognito_error = ClientError(
+                    {"Error": {"Code": code, "Message": "sensitive service detail"}},
+                    "AdminCreateUser",
+                )
+                request = event("POST", {
+                    "username": "staff.one",
+                    "fullName": "Staff One",
+                    "email": "staff@example.test",
+                    "role": "Staff",
+                }, claims={"cognito:groups": ["Admin"]})
+                request["path"] = "/users"
+                with patch("src.users._client") as client_factory:
+                    client_factory.return_value.admin_create_user.side_effect = cognito_error
+                    from src.users import handler
+
+                    result = handler(request)
+
+                payload = response_body(result)
+                self.assertEqual(result["statusCode"], 409)
+                self.assertEqual(payload["code"], "USER_EXISTS")
+                self.assertNotIn("sensitive service detail", result["body"])
+                self.assertEqual(result["headers"]["Access-Control-Allow-Origin"], "http://localhost:8080")
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_cognito_permission_and_configuration_errors_are_safe(self):
+        cases = (
+            ("AccessDeniedException", 403, "COGNITO_ACCESS_DENIED"),
+            ("ResourceNotFoundException", 503, "COGNITO_CONFIGURATION_ERROR"),
+        )
+        for code, status, expected_code in cases:
+            with self.subTest(code=code):
+                cognito_error = ClientError(
+                    {"Error": {"Code": code, "Message": "sensitive service detail"}},
+                    "ListUsers",
+                )
+                with patch("src.users._client") as client_factory:
+                    client_factory.return_value.list_users.side_effect = cognito_error
+                    from src.users import handler
+
+                    result = handler(event("GET", claims={"cognito:groups": ["Admin"]}))
+
+                payload = response_body(result)
+                self.assertEqual(result["statusCode"], status)
+                self.assertEqual(payload["code"], expected_code)
+                self.assertNotIn("sensitive service detail", result["body"])
+                self.assertIn("Access-Control-Allow-Origin", result["headers"])
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_unexpected_cognito_error_returns_safe_generic_500(self):
+        cognito_error = ClientError(
+            {"Error": {"Code": "SomeFutureException", "Message": "sensitive service detail"}},
+            "ListUsers",
+        )
+        with patch("src.users._client") as client_factory:
+            client_factory.return_value.list_users.side_effect = cognito_error
+            from src.users import handler
+
+            result = handler(event("GET", claims={"cognito:groups": ["Admin"]}))
+
+        payload = response_body(result)
+        self.assertEqual(result["statusCode"], 500)
+        self.assertEqual(payload["code"], "INTERNAL_ERROR")
+        self.assertNotIn("sensitive service detail", result["body"])
+        self.assertIn("Access-Control-Allow-Origin", result["headers"])
+
+    def test_response_cors_headers_are_present_on_success_and_error(self):
+        from src.common.http import response
+
+        success_response = response(200, {"success": True, "data": []})
+        error_response = response(400, {"success": False, "code": "INVALID"})
+        for result in (success_response, error_response):
+            self.assertEqual(
+                result["headers"]["Access-Control-Allow-Origin"],
+                "http://localhost:8080",
+            )
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
     def test_user_api_uses_frontend_locked_status_and_reset_password_route(self):
         class FakeCognito:
             def __init__(self):
@@ -356,6 +510,78 @@ class CloudFeatureHandlerTests(unittest.TestCase):
             update_result = handler(update_request)
         self.assertEqual(update_result["statusCode"], 200)
         self.assertEqual(response_body(update_result)["data"]["status"], "LOCKED")
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_staff_can_update_own_profile_but_not_role(self):
+        user_sub = "12345678-1234-1234-1234-123456789012"
+
+        class FakeCognito:
+            updated_attributes = None
+
+            def admin_get_user(self, **kwargs):
+                if kwargs["Username"] == user_sub:
+                    raise ClientError(
+                        {"Error": {"Code": "UserNotFoundException", "Message": "not found"}},
+                        "AdminGetUser",
+                    )
+                return {
+                    "Username": "staff.one",
+                    "Enabled": True,
+                    "Attributes": [
+                        {"Name": "sub", "Value": user_sub},
+                        {"Name": "email", "Value": "staff@example.test"},
+                        {"Name": "name", "Value": "Staff One"},
+                    ],
+                }
+
+            def list_users(self, **kwargs):
+                return {"Users": [{"Username": "staff.one"}]}
+
+            def admin_list_groups_for_user(self, **kwargs):
+                return {"Groups": [{"GroupName": "Staff"}]}
+
+            def admin_update_user_attributes(self, **kwargs):
+                self.updated_attributes = kwargs["UserAttributes"]
+
+        cognito = FakeCognito()
+        request = event(
+            "PUT",
+            {"fullName": "Updated Staff", "email": "updated@example.test"},
+            path_parameters={"userId": user_sub},
+            claims={
+                "cognito:groups": ["Staff"],
+                "cognito:username": "staff.one",
+                "sub": user_sub,
+            },
+        )
+        request["path"] = f"/users/{user_sub}"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler
+
+            result = handler(request)
+
+            role_request = event(
+                "PUT",
+                {"role": "Admin"},
+                path_parameters={"userId": user_sub},
+                claims={
+                    "cognito:groups": ["Staff"],
+                    "cognito:username": "staff.one",
+                    "sub": user_sub,
+                },
+            )
+            role_request["path"] = f"/users/{user_sub}"
+            role_result = handler(role_request)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(
+            cognito.updated_attributes,
+            [
+                {"Name": "email", "Value": "updated@example.test"},
+                {"Name": "name", "Value": "Updated Staff"},
+            ],
+        )
+        self.assertEqual(role_result["statusCode"], 403)
 
     @patch.dict(os.environ, {"BUCKET_NAME": "test-assets", "AWS_REGION": "ap-southeast-1"})
     def test_product_image_upload_is_scoped_and_size_limited(self):
@@ -450,6 +676,40 @@ class LocalApiTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 urllib.request.urlopen(blocked)
             self.assertEqual(error.exception.code, 403)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_local_api_propagates_list_query_parameters(self):
+        captured = {}
+
+        def users_handler(request, context):
+            captured.update(request)
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"success": True, "data": []}),
+            }
+
+        server = create_local_api_server({"users": users_handler})
+        import threading
+        import urllib.request
+
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/users?limit=25&nextToken=page-2"
+            request = urllib.request.Request(url, headers={
+                "Origin": "http://localhost:8080",
+                "Authorization": "Bearer local-dev:Admin",
+            })
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, 200)
+            self.assertEqual(captured["queryStringParameters"], {
+                "limit": "25",
+                "nextToken": "page-2",
+            })
         finally:
             server.shutdown()
             server.server_close()

@@ -6,9 +6,15 @@ const DEPLOY_OUTPUTS = {
   ASSETS_BUCKET: "cloudstock-assets-dev-925268418306-ap-southeast-1"   
 };
 
+const IS_LOCAL_DEVELOPMENT =
+  typeof window !== "undefined" &&
+  ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
 const AWS_CONFIG = {
   REGION: 'ap-southeast-1',
-  API_BASE_URL: DEPLOY_OUTPUTS.API_BASE_URL,
+  API_BASE_URL: IS_LOCAL_DEVELOPMENT
+    ? 'http://localhost:3001'
+    : DEPLOY_OUTPUTS.API_BASE_URL,
   COGNITO: {
     USER_POOL_ID: DEPLOY_OUTPUTS.USER_POOL_ID,
     CLIENT_ID: DEPLOY_OUTPUTS.USER_POOL_CLIENT_ID,
@@ -44,12 +50,12 @@ async function apiRequest(path, options = {}) {
 }
 
 const CONFIG = Object.freeze({
-  USE_MOCK_DATA: true,
-  USE_MOCK_AUTH: true,
-  USE_LOCAL_API: false,
-  USE_LOCAL_API_AUTH: false,
+USE_MOCK_DATA: false,
+USE_MOCK_AUTH: false,
+USE_LOCAL_API: IS_LOCAL_DEVELOPMENT,
+USE_LOCAL_API_AUTH: IS_LOCAL_DEVELOPMENT,
 
-  API_BASE_URL: DEPLOY_OUTPUTS.API_BASE_URL,
+API_BASE_URL: AWS_CONFIG.API_BASE_URL,
 
   COGNITO_USER_POOL_ID: AWS_CONFIG.COGNITO.USER_POOL_ID,
   COGNITO_CLIENT_ID: AWS_CONFIG.COGNITO.CLIENT_ID,
