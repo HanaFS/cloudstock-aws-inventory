@@ -82,13 +82,25 @@ const InventoryModule = (() => {
     if (tab === "in") {
       if (btnTabIn) btnTabIn.classList.add("active");
       if (btnTabOut) btnTabOut.classList.remove("active");
-      if (panelIn) panelIn.style.display = "block";
-      if (panelOut) panelOut.style.display = "none";
+      if (panelIn) {
+        panelIn.classList.remove("hidden");
+        panelIn.style.setProperty("display", "block", "important");
+      }
+      if (panelOut) {
+        panelOut.classList.remove("hidden");
+        panelOut.style.setProperty("display", "none", "important");
+      }
     } else {
       if (btnTabIn) btnTabIn.classList.remove("active");
       if (btnTabOut) btnTabOut.classList.add("active");
-      if (panelIn) panelIn.style.display = "none";
-      if (panelOut) panelOut.style.display = "block";
+      if (panelIn) {
+        panelIn.classList.remove("hidden");
+        panelIn.style.setProperty("display", "none", "important");
+      }
+      if (panelOut) {
+        panelOut.classList.remove("hidden");
+        panelOut.style.setProperty("display", "block", "important");
+      }
     }
   }
 
@@ -103,13 +115,19 @@ const InventoryModule = (() => {
     const prod = productList.find((p) => p.productId === prodId);
 
     if (!prod) {
-      if (infoBox) infoBox.style.display = "none";
+      if (infoBox) {
+        infoBox.classList.add("hidden");
+        infoBox.style.display = "none";
+      }
       return;
     }
 
     if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.quantity);
     if (minQtyEl) minQtyEl.textContent = formatNumber(prod.minThreshold);
-    if (infoBox) infoBox.style.display = "flex";
+    if (infoBox) {
+      infoBox.classList.remove("hidden");
+      infoBox.style.display = "flex";
+    }
 
      
     if (supSelect && prod.supplierId) {
@@ -209,14 +227,20 @@ const InventoryModule = (() => {
     const prod = productList.find((p) => p.productId === prodId);
 
     if (!prod) {
-      if (infoBox) infoBox.style.display = "none";
+      if (infoBox) {
+        infoBox.classList.add("hidden");
+        infoBox.style.display = "none";
+      }
       validateStockOut();
       return;
     }
 
     if (currentQtyEl) currentQtyEl.textContent = formatNumber(prod.quantity);
     if (minQtyEl) minQtyEl.textContent = formatNumber(prod.minThreshold);
-    if (infoBox) infoBox.style.display = "flex";
+    if (infoBox) {
+      infoBox.classList.remove("hidden");
+      infoBox.style.display = "flex";
+    }
 
     validateStockOut();
   }
@@ -232,7 +256,10 @@ const InventoryModule = (() => {
     const amount = parseInt(amountInput?.value, 10);
 
     if (!prod || isNaN(amount) || amount <= 0) {
-      if (warningBox) warningBox.style.display = "none";
+      if (warningBox) {
+        warningBox.classList.add("hidden");
+        warningBox.style.display = "none";
+      }
       if (submitBtn) submitBtn.disabled = false;
       return;
     }
@@ -245,6 +272,7 @@ const InventoryModule = (() => {
     if (amount > currentQty) {
        
       if (warningBox) {
+        warningBox.classList.remove("hidden");
         warningBox.style.display = "block";
         warningBox.className = "login-error visible";
         warningBox.style.background = "var(--danger-light)";
@@ -256,6 +284,7 @@ const InventoryModule = (() => {
     } else if (projectedQty < minThreshold) {
        
       if (warningBox) {
+        warningBox.classList.remove("hidden");
         warningBox.style.display = "block";
         warningBox.className = "login-error visible";
         warningBox.style.background = "var(--warning-light)";
@@ -265,7 +294,10 @@ const InventoryModule = (() => {
       }
       if (submitBtn) submitBtn.disabled = false;
     } else {
-      if (warningBox) warningBox.style.display = "none";
+      if (warningBox) {
+        warningBox.classList.add("hidden");
+        warningBox.style.display = "none";
+      }
       if (submitBtn) submitBtn.disabled = false;
     }
   }
@@ -385,31 +417,41 @@ const InventoryModule = (() => {
       const res = await ApiService.Transactions.getAll();
       const allTxns = res.data || [];
 
-      const recent = allTxns.slice(-5).reverse();
+      // Sắp xếp các giao dịch mới nhất lên đầu (timestamp giảm dần)
+      const sorted = [...allTxns].sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.createdAt || 0).getTime();
+        const timeB = new Date(b.timestamp || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+      // Lấy chính xác 5 giao dịch MỚI NHẤT
+      const recent = sorted.slice(0, 5);
 
       if (recent.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="col-c text-muted cell-padded">Chua co giao dich nhap/xuat nao.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="col-c text-muted cell-padded">Chưa có giao dịch nhập/xuất nào.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = recent
         .map((t) => {
-          const isIN = t.type === "IN";
+          const isIN = t.type === "IN" || t.type === "IMPORT";
+          const amount = t.amount ?? t.quantity ?? 0;
           const typeBadge = isIN
-            ? `<span class="badge badge-in">NHAP (+${formatNumber(t.amount)})</span>`
-            : `<span class="badge badge-out">XUAT (-${formatNumber(t.amount)})</span>`;
+            ? `<span class="badge badge-in">NHẬP (+${formatNumber(amount)})</span>`
+            : `<span class="badge badge-out">XUẤT (-${formatNumber(amount)})</span>`;
 
-          const invoiceIndicator = t.invoiceKey
-            ? `<span class="badge badge-info" title="${t.invoiceKey}">Co chung tu S3</span>`
+          const invoiceRef = t.invoiceKey || t.invoiceUrl;
+          const invoiceIndicator = invoiceRef
+            ? `<span class="badge badge-info" title="${invoiceRef}">Có chứng từ S3</span>`
             : `<span class="text-muted">-</span>`;
 
           return `
             <tr>
-              <td class="col-mono text-xs">${formatDateTime(t.timestamp)}</td>
+              <td class="col-mono text-xs">${formatDateTime(t.timestamp || t.createdAt)}</td>
               <td class="col-mono"><strong>${t.transactionId}</strong></td>
               <td>${typeBadge}</td>
               <td class="col-mono"><strong>${t.productId}</strong></td>
-              <td>${t.productName}</td>
+              <td>${t.productName || "-"}</td>
               <td>${t.reason || "-"}</td>
               <td><span class="text-muted">${t.performedBy || "-"}</span></td>
               <td class="col-c">${invoiceIndicator}</td>
@@ -418,7 +460,7 @@ const InventoryModule = (() => {
         })
         .join("");
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="col-c text-danger">Lỗi tải lịch sử giao dịch: ${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="col-c text-danger">Lỗi tải lịch sử giao dịch: ${err.message}</td></tr>`;
     }
   }
 
@@ -500,6 +542,23 @@ const InventoryModule = (() => {
     }
   }
 
+  async function seedSampleData() {
+    if (typeof MockDataStore !== "undefined") {
+      MockDataStore.reset();
+      await loadData();
+      if (window.AuthModule) {
+        AuthModule.showToast("Đã nạp 12 mặt hàng, 6 nhà cung cấp và 7 giao dịch mẫu vào hệ thống kho!", "success");
+      }
+      if (window.DashboardModule) {
+        DashboardModule.renderDashboard();
+      }
+    } else {
+      if (window.AuthModule) {
+        AuthModule.showToast("MockDataStore chưa sẵn sàng. Vui lòng kiểm tra lại cấu hình.", "warning");
+      }
+    }
+  }
+
   function init() {
      
     const inProd = document.getElementById("inv-in-product");
@@ -531,6 +590,7 @@ const InventoryModule = (() => {
     init,
     loadData,
     switchSubTab,
+    //seedSampleData,
   };
 })();
 window.InventoryModule = InventoryModule;

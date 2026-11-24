@@ -44,8 +44,8 @@ async function apiRequest(path, options = {}) {
 }
 
 const CONFIG = Object.freeze({
-  USE_MOCK_DATA: false,
-  USE_MOCK_AUTH: false,
+  USE_MOCK_DATA: true,
+  USE_MOCK_AUTH: true,
   USE_LOCAL_API: false,
   USE_LOCAL_API_AUTH: false,
 
