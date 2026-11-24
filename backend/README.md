@@ -108,10 +108,11 @@ Mở terminal riêng tại thư mục `frontend`:
 python -m http.server 8080
 ```
 
-Truy cập `http://localhost:8080`. Mặc định giao diện vẫn dùng mock users/logs
-và tự tính dashboard ở chế độ local; các dữ liệu products/suppliers/transactions
-được lưu vào DynamoDB Local. Local adapter chưa mô phỏng Cognito, S3 hoặc
-CloudWatch.
+Truy cập `http://localhost:8080`. Ở chế độ local, danh sách và thao tác người
+dùng được mô phỏng trong Local Storage của trình duyệt; thao tác này không tạo
+tài khoản Cognito thật. Giao diện tự tính dashboard; dữ liệu
+products/suppliers/transactions được lưu vào DynamoDB Local. Local adapter chưa
+mô phỏng Cognito, S3 hoặc CloudWatch.
 
 ## SAM và môi trường Cloud
 

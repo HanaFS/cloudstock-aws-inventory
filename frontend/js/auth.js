@@ -4,6 +4,7 @@ const AuthModule = (() => {
   let filterKeyword = "";
   let filterRole = "ALL";
   let filterStatus = "ALL";
+  let isCreatingUser = false;
 
   function showToast(message, type = "info") {
     let container = document.getElementById("toast-container");
@@ -386,18 +387,16 @@ const AuthModule = (() => {
     const user = allUsers.find((u) => u.id === userId);
     if (!user) return;
 
-    showToast(
-      `Amazon Cognito: Đã gửi liên kết khôi phục mật khẩu đến email ${user.email}`,
-      "info"
-    );
-
-    if (typeof MockDataStore !== "undefined") {
-      MockDataStore.add("systemLogs", {
-        timestamp: new Date().toISOString(),
-        logStream: "lambda/authService",
-        level: "INFO",
-        message: `AdminResetUserPassword: Đã phát yêu cầu đặt lại mật khẩu cho user '${user.username}' qua Cognito User Pool.`,
-      });
+    try {
+      await ApiService.Users.resetPassword(userId);
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? `Đã mô phỏng đặt lại mật khẩu cho ${user.username} trong chế độ local`
+          : `Đã gửi yêu cầu đặt lại mật khẩu đến email ${user.email}`,
+        "success"
+      );
+    } catch (err) {
+      showToast(`Lỗi đặt lại mật khẩu: ${err.message}`, "error");
     }
   }
 
@@ -416,6 +415,8 @@ const AuthModule = (() => {
 
   async function handleCreateUser(e) {
     e.preventDefault();
+    if (isCreatingUser) return;
+
     const currentUser = ApiService.Auth.getCurrentUser();
     if (!currentUser || currentUser.role !== "Admin") {
       showToast("Chỉ Admin mới có quyền tạo tài khoản", "error");
@@ -439,6 +440,16 @@ const AuthModule = (() => {
       return;
     }
 
+    isCreatingUser = true;
+    const submitButton = document.querySelector(
+      "#form-create-user button[type='submit']"
+    );
+    const originalButtonText = submitButton ? submitButton.textContent : "";
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang tạo...";
+    }
+
     try {
       const newUser = {
         id: "u-" + Date.now().toString(36),
@@ -460,11 +471,22 @@ const AuthModule = (() => {
         });
       }
 
-      showToast(`Tạo tài khoản ${username} thành công (Cognito Simulated)`, "success");
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? `Đã thêm ${username} vào danh sách local (không tạo tài khoản Cognito)`
+          : `Tạo tài khoản ${username} thành công`,
+        "success"
+      );
       closeCreateUserModal();
       loadUserList();
     } catch (err) {
       showToast(`Lỗi tạo tài khoản: ${err.message}`, "error");
+    } finally {
+      isCreatingUser = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalButtonText;
+      }
     }
   }
 

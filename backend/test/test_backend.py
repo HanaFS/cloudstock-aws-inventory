@@ -335,6 +335,45 @@ class CloudFeatureHandlerTests(unittest.TestCase):
         )
 
     @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_user_list_serializes_cognito_attributes_and_role(self):
+        class FakeCognito:
+            def list_users(self, **kwargs):
+                return {
+                    "Users": [{
+                        "Username": "staff.one",
+                        "Enabled": True,
+                        "Attributes": [
+                            {"Name": "sub", "Value": "12345678-1234-1234-1234-123456789012"},
+                            {"Name": "name", "Value": "Staff One"},
+                            {"Name": "email", "Value": "staff@example.test"},
+                        ],
+                    }]
+                }
+
+            def admin_list_groups_for_user(self, **kwargs):
+                self.username = kwargs["Username"]
+                return {"Groups": [{"GroupName": "Staff"}]}
+
+        cognito = FakeCognito()
+        request = event("GET", claims={"cognito:groups": ["Admin"]})
+        request["path"] = "/users"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler
+
+            result = handler(request)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(response_body(result)["data"], [{
+            "id": "12345678-1234-1234-1234-123456789012",
+            "username": "staff.one",
+            "fullName": "Staff One",
+            "email": "staff@example.test",
+            "role": "Staff",
+            "status": "ACTIVE",
+        }])
+        self.assertEqual(cognito.username, "staff.one")
+
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
     def test_create_user_maps_duplicate_username_and_email_alias(self):
         for code in ("UsernameExistsException", "AliasExistsException"):
             with self.subTest(code=code):
