@@ -1,0 +1,189 @@
+{
+  "totalProducts": 24,
+  "totalSuppliers": 6,
+  "totalStockQuantity": 467,
+  "totalStockValue": 3009100000,
+  "lowStockCount": 6,
+  "outOfStockCount": 2,
+  "lowStockItems": [
+    {
+      "productId": "PRD-016",
+      "name": "Hub USB-C Anker 7 cổng",
+      "category": "Phụ kiện",
+      "quantity": 0,
+      "minThreshold": 12
+    },
+    {
+      "productId": "PRD-021",
+      "name": "Mainboard ASUS PRIME B760M",
+      "category": "Linh kiện",
+      "quantity": 0,
+      "minThreshold": 6
+    },
+    {
+      "productId": "PRD-015",
+      "name": "Bàn phím Logitech MX Keys",
+      "category": "Phụ kiện",
+      "quantity": 2,
+      "minThreshold": 8
+    },
+    {
+      "productId": "PRD-024",
+      "name": "Switch Cisco CBS110 8 cổng",
+      "category": "Thiết bị mạng",
+      "quantity": 2,
+      "minThreshold": 6
+    },
+    {
+      "productId": "PRD-013",
+      "name": "Webcam Logitech C920 HD Pro",
+      "category": "Phụ kiện",
+      "quantity": 3,
+      "minThreshold": 8
+    },
+    {
+      "productId": "PRD-005",
+      "name": "Laptop HP Pavilion 15",
+      "category": "Laptop",
+      "quantity": 3,
+      "minThreshold": 4
+    }
+  ],
+  "today": {
+    "date": "2026-11-20",
+    "importCount": 0,
+    "exportCount": 4,
+    "importQuantity": 0,
+    "exportQuantity": 12
+  },
+  "last7Days": [
+    {
+      "date": "2026-11-14",
+      "in": 0,
+      "out": 16,
+      "importCount": 0,
+      "exportCount": 6
+    },
+    {
+      "date": "2026-11-15",
+      "in": 22,
+      "out": 9,
+      "importCount": 1,
+      "exportCount": 4
+    },
+    {
+      "date": "2026-11-16",
+      "in": 0,
+      "out": 12,
+      "importCount": 0,
+      "exportCount": 4
+    },
+    {
+      "date": "2026-11-17",
+      "in": 0,
+      "out": 21,
+      "importCount": 0,
+      "exportCount": 7
+    },
+    {
+      "date": "2026-11-18",
+      "in": 52,
+      "out": 9,
+      "importCount": 1,
+      "exportCount": 4
+    },
+    {
+      "date": "2026-11-19",
+      "in": 24,
+      "out": 9,
+      "importCount": 1,
+      "exportCount": 3
+    },
+    {
+      "date": "2026-11-20",
+      "in": 0,
+      "out": 12,
+      "importCount": 0,
+      "exportCount": 4
+    }
+  ],
+  "byCategory": [
+    {
+      "category": "Laptop",
+      "productCount": 5,
+      "quantity": 38,
+      "stockValue": 1248960000
+    },
+    {
+      "category": "Màn hình",
+      "productCount": 4,
+      "quantity": 77,
+      "stockValue": 720920000
+    },
+    {
+      "category": "Linh kiện",
+      "productCount": 6,
+      "quantity": 192,
+      "stockValue": 646900000
+    },
+    {
+      "category": "Phụ kiện",
+      "productCount": 7,
+      "quantity": 125,
+      "stockValue": 337270000
+    },
+    {
+      "category": "Thiết bị mạng",
+      "productCount": 2,
+      "quantity": 35,
+      "stockValue": 55050000
+    }
+  ],
+  "recentTransactions": [
+    {
+      "transactionId": "txn-76790a23867c8603207eeab5cd2cacf3",
+      "timestamp": "2026-11-20T16:21:00.000Z",
+      "type": "OUT",
+      "productId": "PRD-022",
+      "productName": "Nguồn Corsair RM750e 750W",
+      "amount": 6,
+      "performedBy": "admin.nguyen"
+    },
+    {
+      "transactionId": "txn-69e21c29aae5929579b8f06929050fca",
+      "timestamp": "2026-11-20T16:21:00.000Z",
+      "type": "OUT",
+      "productId": "PRD-003",
+      "productName": "Laptop Lenovo ThinkPad X1 Carbon Gen 11",
+      "amount": 3,
+      "performedBy": "admin.nguyen"
+    },
+    {
+      "transactionId": "txn-ed329ea4259a5962b64d4898c2cee5d8",
+      "timestamp": "2026-11-20T15:03:00.000Z",
+      "type": "OUT",
+      "productId": "PRD-016",
+      "productName": "Hub USB-C Anker 7 cổng",
+      "amount": 1,
+      "performedBy": "staff.le"
+    },
+    {
+      "transactionId": "txn-83ab89a41db59e63f62b514fe19dfa1b",
+      "timestamp": "2026-11-20T09:09:00.000Z",
+      "type": "OUT",
+      "productId": "PRD-002",
+      "productName": "Laptop ASUS ZenBook 14 OLED",
+      "amount": 2,
+      "performedBy": "staff.tran"
+    },
+    {
+      "transactionId": "txn-56bbeaf6512b7743334b52181d7f1665",
+      "timestamp": "2026-11-19T11:28:00.000Z",
+      "type": "OUT",
+      "productId": "PRD-019",
+      "productName": "Card đồ họa GeForce RTX 4060 8GB",
+      "amount": 6,
+      "performedBy": "admin.nguyen"
+    }
+  ]
+}
