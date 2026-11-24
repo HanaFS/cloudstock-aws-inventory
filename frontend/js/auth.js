@@ -185,7 +185,70 @@ const AuthModule = (() => {
     }
   }
 
-   
+  function openProfileEditModal() {
+    const user = ApiService.Auth.getCurrentUser();
+    if (!user) return;
+
+    document.getElementById("edit-profile-fullname").value = user.fullName || "";
+    document.getElementById("edit-profile-email").value = user.email || "";
+    document.getElementById("modal-edit-profile")?.classList.add("visible");
+  }
+
+  function closeProfileEditModal() {
+    document.getElementById("modal-edit-profile")?.classList.remove("visible");
+  }
+
+  async function handleProfileUpdate(e) {
+    e.preventDefault();
+    const user = ApiService.Auth.getCurrentUser();
+    if (!user) {
+      showToast("Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.", "error");
+      return;
+    }
+
+    const fullName = document.getElementById("edit-profile-fullname").value.trim();
+    const email = document.getElementById("edit-profile-email").value.trim();
+    if (!fullName || fullName.length > 200 || !email || email.length > 320) {
+      showToast("Vui lòng nhập họ tên và email hợp lệ.", "warning");
+      return;
+    }
+
+    const submitButton = document.querySelector(
+      "#form-edit-profile button[type='submit']"
+    );
+    if (submitButton?.disabled) return;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang lưu...";
+    }
+
+    try {
+      const result = await ApiService.Users.update(user.id, { fullName, email });
+      const savedUser = result.data || {};
+      const updatedUser = {
+        ...user,
+        fullName: savedUser.fullName || fullName,
+        email: savedUser.email || email,
+      };
+      localStorage.setItem("cloudstock_current_user", JSON.stringify(updatedUser));
+      renderUserHeaderAndSidebar(updatedUser);
+      renderProfile();
+      closeProfileEditModal();
+      showToast(
+        CONFIG.USE_LOCAL_API_AUTH
+          ? "Đã lưu hồ sơ trong chế độ local."
+          : "Đã cập nhật thông tin hồ sơ.",
+        "success"
+      );
+    } catch (err) {
+      showToast(`Lỗi cập nhật hồ sơ: ${err.message}`, "error");
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Lưu thay đổi";
+      }
+    }
+  }
 
 
   async function loadUserList() {
@@ -547,6 +610,12 @@ const AuthModule = (() => {
        
       const formCreate = document.getElementById("form-create-user");
       if (formCreate) formCreate.addEventListener("submit", handleCreateUser);
+
+      const formProfile = document.getElementById("form-edit-profile");
+      if (formProfile && formProfile.dataset.submitBound !== "true") {
+        formProfile.addEventListener("submit", handleProfileUpdate);
+        formProfile.dataset.submitBound = "true";
+      }
     }
   }
 
@@ -561,6 +630,8 @@ const AuthModule = (() => {
     init,
     checkAuth,
     renderProfile,
+    openProfileEditModal,
+    closeProfileEditModal,
     loadUserList,
     toggleUserRole,
     toggleUserStatus,

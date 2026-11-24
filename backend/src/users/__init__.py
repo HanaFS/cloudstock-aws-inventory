@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from functools import wraps
@@ -59,6 +60,21 @@ def _serialize_user(client, user):
         "role": role,
         "status": "ACTIVE" if user.get("Enabled", True) else "LOCKED",
     }
+
+
+def _has_group(event, group):
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("claims", {})
+    )
+    groups = claims.get("cognito:groups", claims.get("groups", []))
+    if isinstance(groups, str):
+        try:
+            groups = json.loads(groups)
+        except ValueError:
+            groups = [item.strip() for item in groups.split(",")]
+    return isinstance(groups, list) and group in groups
 
 
 def _find_user(client, username):
@@ -138,11 +154,16 @@ def _with_cognito_error_handling(handler):
 @with_error_handling
 @_with_cognito_error_handling
 def handler(event, context=None):
-    require_any_group(event, ["Admin"])
-    client = _client()
-    pool_id = _user_pool_id()
     method = event.get("httpMethod")
     username = (event.get("pathParameters") or {}).get("userId")
+    if method == "PUT" and username:
+        require_any_group(event, ["Admin", "Staff"])
+        is_admin = _has_group(event, "Admin")
+    else:
+        require_any_group(event, ["Admin"])
+        is_admin = True
+    client = _client()
+    pool_id = _user_pool_id()
 
     if method == "GET" and not username:
         params = event.get("queryStringParameters") or {}
@@ -201,11 +222,17 @@ def handler(event, context=None):
         allowed_fields = {"email", "fullName", "role", "status"}
         if not body or set(body) - allowed_fields:
             raise ApiError(400, "INVALID_USER_UPDATE", "Gửi ít nhất một trường hợp lệ: email, fullName, role, status.")
-        current = _serialize_user(client, _find_user(client, username))
-        username = current["username"]
         claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
         actor = claims.get("cognito:username") or claims.get("username")
-        if actor == username and body.get("role", current["role"]) != "Admin":
+        if not is_admin:
+            if set(body) - {"email", "fullName"}:
+                raise ApiError(403, "FORBIDDEN", "Chỉ Admin mới được thay đổi vai trò hoặc trạng thái tài khoản.")
+            if username not in {actor, claims.get("sub")}:
+                raise ApiError(403, "FORBIDDEN", "Bạn chỉ được sửa thông tin hồ sơ của chính mình.")
+        current = _serialize_user(client, _find_user(client, username))
+        username = current["username"]
+        is_self = actor == username or claims.get("sub") == current["id"]
+        if is_admin and is_self and body.get("role") and body["role"] != "Admin":
             raise ApiError(409, "SELF_ROLE_CHANGE", "Không thể tự hạ quyền Admin của chính mình.")
         try:
             attributes = []

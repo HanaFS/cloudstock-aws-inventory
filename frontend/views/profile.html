@@ -10,6 +10,9 @@
   <div class="card">
     <div class="card-header">
       <h3>Chi tiết Tài khoản</h3>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="AuthModule.openProfileEditModal()">
+        Sửa thông tin
+      </button>
     </div>
     <div class="card-body">
       <div class="profile-grid">
@@ -41,4 +44,29 @@
     </div>
   </div>
 </section>
+
+<div class="modal-backdrop" id="modal-edit-profile">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h3>Sửa thông tin cá nhân</h3>
+      <button type="button" class="modal-close" onclick="AuthModule.closeProfileEditModal()">Đóng</button>
+    </div>
+    <form id="form-edit-profile">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="edit-profile-fullname">Họ và tên <span class="required">*</span></label>
+          <input type="text" id="edit-profile-fullname" class="form-input" maxlength="200" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-profile-email">Email liên hệ <span class="required">*</span></label>
+          <input type="email" id="edit-profile-email" class="form-input" maxlength="320" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="AuthModule.closeProfileEditModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+      </div>
+    </form>
+  </div>
+</div>
 

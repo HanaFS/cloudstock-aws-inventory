@@ -11,7 +11,8 @@ của người phụ trách Cloud; xem [API contract](API_CONTRACT.md) để bi�
 - `GET|POST /products`, `GET|PUT|DELETE /products/{productId}`.
 - `GET|POST /suppliers`, `GET|PUT|DELETE /suppliers/{supplierId}`.
 - `GET /transactions`, `GET /transactions/{transactionId}`, `POST /transactions`.
-- `GET|POST /users`, `GET|PUT|DELETE /users/{userId}` (chỉ Admin).
+- `GET|POST /users`, `GET|DELETE /users/{userId}` (chỉ Admin);
+  `PUT /users/{userId}` cho phép người dùng sửa email/họ tên của chính mình.
 - `POST /users/{userId}/reset-password` gửi yêu cầu đặt lại mật khẩu qua Cognito (chỉ Admin).
 - `GET /dashboard`.
 - `GET /logs` (chỉ Admin).
@@ -19,8 +20,9 @@ của người phụ trách Cloud; xem [API contract](API_CONTRACT.md) để bi�
 - `POST /transactions/invoice-upload-url` tạo presigned POST cho hóa đơn nhập.
 - `GET /transactions/{transactionId}/invoice-url` tạo URL đọc hóa đơn có hạn.
 
-Các API trừ `/health` yêu cầu Cognito group `Admin` hoặc `Staff`; `/users` và
-`/logs` yêu cầu `Admin`. Thành công trả JSON dạng
+Các API trừ `/health` yêu cầu Cognito group `Admin` hoặc `Staff`; quản trị
+người dùng và `/logs` yêu cầu `Admin`, ngoại trừ người dùng được sửa email/họ
+tên của chính mình. Thành công trả JSON dạng
 `{"success": true, "data": ...}`; danh sách hỗ trợ `limit` và `nextToken`.
 `POST /transactions` yêu cầu `Idempotency-Key`. Nhập/xuất và ghi lịch sử giao
 dịch được thực hiện trong một DynamoDB transaction; xung đột stock bị từ chối

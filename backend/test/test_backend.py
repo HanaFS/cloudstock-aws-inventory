@@ -511,6 +511,78 @@ class CloudFeatureHandlerTests(unittest.TestCase):
         self.assertEqual(update_result["statusCode"], 200)
         self.assertEqual(response_body(update_result)["data"]["status"], "LOCKED")
 
+    @patch.dict(os.environ, {"USER_POOL_ID": "pool-1"})
+    def test_staff_can_update_own_profile_but_not_role(self):
+        user_sub = "12345678-1234-1234-1234-123456789012"
+
+        class FakeCognito:
+            updated_attributes = None
+
+            def admin_get_user(self, **kwargs):
+                if kwargs["Username"] == user_sub:
+                    raise ClientError(
+                        {"Error": {"Code": "UserNotFoundException", "Message": "not found"}},
+                        "AdminGetUser",
+                    )
+                return {
+                    "Username": "staff.one",
+                    "Enabled": True,
+                    "Attributes": [
+                        {"Name": "sub", "Value": user_sub},
+                        {"Name": "email", "Value": "staff@example.test"},
+                        {"Name": "name", "Value": "Staff One"},
+                    ],
+                }
+
+            def list_users(self, **kwargs):
+                return {"Users": [{"Username": "staff.one"}]}
+
+            def admin_list_groups_for_user(self, **kwargs):
+                return {"Groups": [{"GroupName": "Staff"}]}
+
+            def admin_update_user_attributes(self, **kwargs):
+                self.updated_attributes = kwargs["UserAttributes"]
+
+        cognito = FakeCognito()
+        request = event(
+            "PUT",
+            {"fullName": "Updated Staff", "email": "updated@example.test"},
+            path_parameters={"userId": user_sub},
+            claims={
+                "cognito:groups": ["Staff"],
+                "cognito:username": "staff.one",
+                "sub": user_sub,
+            },
+        )
+        request["path"] = f"/users/{user_sub}"
+        with patch("src.users._client", return_value=cognito):
+            from src.users import handler
+
+            result = handler(request)
+
+            role_request = event(
+                "PUT",
+                {"role": "Admin"},
+                path_parameters={"userId": user_sub},
+                claims={
+                    "cognito:groups": ["Staff"],
+                    "cognito:username": "staff.one",
+                    "sub": user_sub,
+                },
+            )
+            role_request["path"] = f"/users/{user_sub}"
+            role_result = handler(role_request)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(
+            cognito.updated_attributes,
+            [
+                {"Name": "email", "Value": "updated@example.test"},
+                {"Name": "name", "Value": "Updated Staff"},
+            ],
+        )
+        self.assertEqual(role_result["statusCode"], 403)
+
     @patch.dict(os.environ, {"BUCKET_NAME": "test-assets", "AWS_REGION": "ap-southeast-1"})
     def test_product_image_upload_is_scoped_and_size_limited(self):
         class FakeS3:
