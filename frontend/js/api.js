@@ -24,10 +24,12 @@ const ApiService = (() => {
   }
 
   async function _fetchAPI(method, path, body = null, additionalHeaders = {}) {
-    const baseUrl =
-      (typeof AWS_CONFIG !== "undefined" && AWS_CONFIG.API_BASE_URL) ||
-      (typeof CONFIG !== "undefined" && CONFIG.API_BASE_URL) ||
-      "";
+    const isLocal = typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API;
+    const baseUrl = isLocal
+      ? ((typeof CONFIG !== "undefined" && CONFIG.API_BASE_URL) || "http://localhost:3001")
+      : (typeof AWS_CONFIG !== "undefined" && AWS_CONFIG.API_BASE_URL) ||
+        (typeof CONFIG !== "undefined" && CONFIG.API_BASE_URL) ||
+        "";
     const url = `${baseUrl}${path}`;
     const token = _getToken();
     const headers = {

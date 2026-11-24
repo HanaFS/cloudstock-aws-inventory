@@ -33,7 +33,7 @@ async function loadAllViews() {
   try {
     const htmlSnippets = await Promise.all(
       VIEW_DEFINITIONS.map(async (v) => {
-        const res = await fetch(v.file);
+        const res = await fetch(`${v.file}?t=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) {
           throw new Error(`Không thể nạp tệp: ${v.file} (HTTP ${res.status})`);
         }

@@ -87,10 +87,10 @@ def configure_local_environment(env=None):
         ("COGNITO_ENDPOINT", {4566}),
         ("CLOUDWATCH_ENDPOINT", {4566}),
     ):
-        endpoint = env.get(variable)
-        if not endpoint:
+        svc_endpoint = env.get(variable)
+        if not svc_endpoint:
             continue
-        service = urlsplit(endpoint)
+        service = urlsplit(svc_endpoint)
         if (
             service.scheme != "http"
             or service.hostname not in ("localhost", "127.0.0.1")
