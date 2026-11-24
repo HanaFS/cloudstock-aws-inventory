@@ -1,5 +1,6 @@
 import os
 import re
+from functools import wraps
 
 import boto3
 from botocore.exceptions import ClientError
@@ -110,16 +111,32 @@ def _replace_role(client, username, role):
 
 def _handle_client_error(error):
     code = error.response.get("Error", {}).get("Code")
-    if code == "UsernameExistsException":
-        raise ApiError(409, "USER_EXISTS", "Tên người dùng đã tồn tại.") from error
+    if code in ("UsernameExistsException", "AliasExistsException"):
+        raise ApiError(409, "USER_EXISTS", "Tên người dùng hoặc email đã tồn tại.") from error
     if code == "UserNotFoundException":
         raise ApiError(404, "USER_NOT_FOUND", "Không tìm thấy người dùng.") from error
     if code in ("InvalidParameterException", "InvalidPasswordException"):
         raise ApiError(400, "INVALID_USER", "Thông tin người dùng không hợp lệ.") from error
+    if code in ("AccessDeniedException", "NotAuthorizedException"):
+        raise ApiError(403, "COGNITO_ACCESS_DENIED", "Dịch vụ Cognito từ chối thao tác.") from error
+    if code in ("ResourceNotFoundException", "OperationNotEnabledException"):
+        raise ApiError(503, "COGNITO_CONFIGURATION_ERROR", "Dịch vụ Cognito chưa được cấu hình đúng.") from error
     raise error
 
 
+def _with_cognito_error_handling(handler):
+    @wraps(handler)
+    def wrapped(event, context=None):
+        try:
+            return handler(event, context)
+        except ClientError as error:
+            _handle_client_error(error)
+
+    return wrapped
+
+
 @with_error_handling
+@_with_cognito_error_handling
 def handler(event, context=None):
     require_any_group(event, ["Admin"])
     client = _client()

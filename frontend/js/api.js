@@ -341,9 +341,10 @@ const ApiService = (() => {
     async create(user) {
       if (_usesMockData("users")) return _mockCreate("users", user);
       const payload = {
+        username: user.username,
+        fullName: user.fullName,
         email: user.email,
-        password: user.password || "Staff@123",
-        role: user.role || "Staff",
+        role: user.role === "Warehouse Staff" ? "Staff" : (user.role || "Staff"),
       };
       const res = await _fetchAPI("POST", "/users", payload);
       return _wrapResponse(res);
