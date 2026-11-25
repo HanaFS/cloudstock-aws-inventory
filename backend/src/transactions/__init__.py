@@ -13,7 +13,6 @@ from botocore.exceptions import ClientError
 
 from ..common.dynamodb import dynamodb, query_page
 from ..common.http import ApiError, parse_body, require_any_group, success, with_error_handling
-from ..schema_compat import CompatibilityError, normalize_product, normalize_transaction
 
 PRODUCT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 INVOICE_RESERVATION_PATTERN = re.compile(r"^[0-9a-f]{32}$")
