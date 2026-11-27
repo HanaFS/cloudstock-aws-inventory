@@ -36,7 +36,7 @@ const DashboardModule = (() => {
 
      
     const totalValue = products.reduce(
-      (sum, p) => sum + (p.quantity || 0) * (p.price || 0),
+      (sum, p) => sum + (Number(p.quantity ?? p.stockQuantity) || 0) * (Number(p.price) || 0),
       0
     );
 
@@ -47,19 +47,20 @@ const DashboardModule = (() => {
     const todayDay = String(today.getDate()).padStart(2, "0");
     const todayPrefix = `${todayYear}-${todayMonth}-${todayDay}`;
 
-    const todayTxns = transactions.filter((t) =>
-      t.timestamp ? t.timestamp.startsWith(todayPrefix) : false
-    );
+    const todayTxns = transactions.filter((t) => {
+      const timeStr = t.timestamp || t.createdAt || "";
+      return timeStr.startsWith(todayPrefix);
+    });
     const todayIn = todayTxns
-      .filter((t) => t.type === "IN")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "IN" || t.type === "IMPORT")
+      .reduce((sum, t) => sum + (Number(t.amount ?? t.quantity) || 0), 0);
     const todayOut = todayTxns
-      .filter((t) => t.type === "OUT")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "OUT" || t.type === "EXPORT")
+      .reduce((sum, t) => sum + (Number(t.amount ?? t.quantity) || 0), 0);
 
      
     const lowStockProducts = products.filter(
-      (p) => (p.quantity || 0) < (p.minThreshold || 0)
+      (p) => (Number(p.quantity ?? p.stockQuantity) || 0) < (Number(p.minThreshold) || 0)
     );
 
      
@@ -73,7 +74,7 @@ const DashboardModule = (() => {
     if (elTotalValue) elTotalValue.textContent = formatCurrency(totalValue);
     if (elTodayTxns) elTodayTxns.textContent = formatNumber(todayTxns.length);
     if (elTodayBreakdown) {
-      elTodayBreakdown.textContent = `Nhap: +${formatNumber(todayIn)} | Xuat: -${formatNumber(todayOut)}`;
+      elTodayBreakdown.textContent = `Nhập: +${formatNumber(todayIn)} | Xuất: -${formatNumber(todayOut)}`;
     }
     if (elLowStock) elLowStock.textContent = formatNumber(lowStockProducts.length);
   }
@@ -108,13 +109,17 @@ const DashboardModule = (() => {
     });
 
     transactions.forEach((t) => {
-      if (!t.timestamp) return;
-      const key = t.timestamp.slice(0, 10);
+      const timeStr = t.timestamp || t.createdAt;
+      if (!timeStr) return;
+      const key = timeStr.slice(0, 10);
       if (key in inDataByDay) {
-        if (t.type === "IN") {
-          inDataByDay[key] += t.amount || 0;
-        } else if (t.type === "OUT") {
-          outDataByDay[key] += t.amount || 0;
+        const isIN = t.type === "IN" || t.type === "IMPORT";
+        const isOUT = t.type === "OUT" || t.type === "EXPORT";
+        const amt = Number(t.amount ?? t.quantity) || 0;
+        if (isIN) {
+          inDataByDay[key] += amt;
+        } else if (isOUT) {
+          outDataByDay[key] += amt;
         }
       }
     });
@@ -214,8 +219,8 @@ const DashboardModule = (() => {
      
     const categoryTotals = {};
     products.forEach((p) => {
-      const cat = p.category || "Chua phan loai";
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + (p.quantity || 0);
+      const cat = p.category || "Chưa phân loại";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + (Number(p.quantity ?? p.stockQuantity) || 0);
     });
 
     const labels = Object.keys(categoryTotals);
@@ -305,18 +310,18 @@ const DashboardModule = (() => {
 
      
     const lowStockList = products.filter(
-      (p) => (p.quantity || 0) < (p.minThreshold || 0)
+      (p) => (Number(p.quantity ?? p.stockQuantity) || 0) < (Number(p.minThreshold) || 0)
     );
 
      
     lowStockList.sort((a, b) => {
-      const deficitA = (a.minThreshold || 0) - (a.quantity || 0);
-      const deficitB = (b.minThreshold || 0) - (b.quantity || 0);
+      const deficitA = (Number(a.minThreshold) || 0) - (Number(a.quantity ?? a.stockQuantity) || 0);
+      const deficitB = (Number(b.minThreshold) || 0) - (Number(b.quantity ?? b.stockQuantity) || 0);
       return deficitB - deficitA;
     });
 
     if (badgeCount) {
-      badgeCount.textContent = `${lowStockList.length} mat hang`;
+      badgeCount.textContent = `${lowStockList.length} mặt hàng`;
       badgeCount.className =
         lowStockList.length > 0 ? "badge badge-danger" : "badge badge-success";
     }
@@ -334,15 +339,15 @@ const DashboardModule = (() => {
 
     tbody.innerHTML = lowStockList
       .map((p) => {
-        const currentQty = p.quantity || 0;
-        const minQty = p.minThreshold || 0;
+        const currentQty = Number(p.quantity ?? p.stockQuantity) || 0;
+        const minQty = Number(p.minThreshold) || 0;
         const deficit = minQty - currentQty;  
 
         return `
           <tr>
             <td class="col-mono">${p.productId}</td>
             <td><strong>${p.name}</strong></td>
-            <td><span class="badge badge-neutral">${p.category}</span></td>
+            <td><span class="badge badge-neutral">${p.category || "-"}</span></td>
             <td class="col-r text-danger font-semibold">${formatNumber(currentQty)}</td>
             <td class="col-r text-muted">${formatNumber(minQty)}</td>
             <td class="col-r text-danger">+${formatNumber(deficit)}</td>
@@ -351,9 +356,9 @@ const DashboardModule = (() => {
                 type="button"
                 class="btn btn-primary btn-sm"
                 onclick="DashboardModule.quickStockIn('${p.productId}')"
-                title="Tao phieu nhap kho cho ${p.name}"
+                title="Tạo phiếu nhập kho cho ${p.name}"
               >
-                Tao phieu nhap
+                Tạo phiếu nhập
               </button>
             </td>
           </tr>
@@ -391,14 +396,20 @@ const DashboardModule = (() => {
 
   async function renderDashboard() {
     try {
-       
-      const [productsRes, txnsRes] = await Promise.all([
+      const [productsRes, txnsRes] = await Promise.allSettled([
         ApiService.Products.getAll(),
         ApiService.Transactions.getAll(),
       ]);
 
-      const products = productsRes.data || [];
-      const transactions = txnsRes.data || [];
+      const products = (productsRes.status === "fulfilled" && productsRes.value?.data) ? productsRes.value.data : [];
+      const transactions = (txnsRes.status === "fulfilled" && txnsRes.value?.data) ? txnsRes.value.data : [];
+
+      if (productsRes.status === "rejected") {
+        console.warn("Không thể tải danh sách sản phẩm:", productsRes.reason);
+      }
+      if (txnsRes.status === "rejected") {
+        console.warn("Không thể tải danh sách giao dịch:", txnsRes.reason);
+      }
 
        
       updateStatCards(products, transactions);

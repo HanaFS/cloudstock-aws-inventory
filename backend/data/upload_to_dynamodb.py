@@ -58,27 +58,30 @@ def fix_transaction(item):
     tx_type = 'IMPORT' if raw_type == 'IN' else 'EXPORT'
 
     created_at = item.get('createdAt') or item.get('timestamp', '')
+    if not created_at:
+        created_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
+    transaction_id = item.get('transactionId', '')
     quantity = to_decimal(item.get('quantity') or item.get('amount', 0))
 
     result = {
-        'transactionId': item.get('transactionId', ''),
+        'transactionId': transaction_id,
         'createdAt':     created_at,
         'type':          tx_type,
         'productId':     item.get('productId', ''),
         'productName':   item.get('productName', ''),
         'quantity':      quantity,
         'performedBy':   item.get('performedBy', 'local-admin'),
+        'gsi1pk':        'TRANSACTION',
+        'gsi1sk':        f"{created_at}#{transaction_id}",
     }
 
-    # Trường tùy loại
     if tx_type == 'IMPORT':
         result['supplierId'] = item.get('supplierId')
         result['invoiceUrl'] = item.get('invoiceKey') or item.get('invoiceUrl')
-    else:  # EXPORT
-        result['reason'] = item.get('reason', '')
+    else:
+        result['reason'] = item.get('reason') or 'Xuất kho'
 
-    # Bỏ các field None để DynamoDB không lỗi
     return {k: v for k, v in result.items() if v is not None}
 
 

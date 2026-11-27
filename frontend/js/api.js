@@ -23,7 +23,69 @@ const ApiService = (() => {
     );
   }
 
+  // ✅ FIX 1: Kiểm tra token còn hạn không (còn ít nhất 2 phút)
+  function _isTokenValid(token) {
+    try {
+      if (!token || token.startsWith("local-dev:")) return true;
+      const payload = JSON.parse(
+        atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+      );
+      return payload.exp * 1000 > Date.now() + 2 * 60 * 1000;
+    } catch {
+      return false;
+    }
+  }
+
+  async function _refreshTokenIfPossible() {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) {
+      ApiService.Auth.logout();
+      window.location.reload();
+      return;
+    }
+    try {
+      const clientId =
+        (typeof AWS_CONFIG !== "undefined" && AWS_CONFIG.COGNITO?.CLIENT_ID) ||
+        (typeof CONFIG !== "undefined" && CONFIG.COGNITO_CLIENT_ID) ||
+        "7qmk3hnllp292nguotfht8m7uh";
+      const region =
+        (typeof AWS_CONFIG !== "undefined" && AWS_CONFIG.REGION) || "ap-southeast-1";
+
+      const resp = await fetch(`https://cognito-idp.${region}.amazonaws.com/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-amz-json-1.1",
+          "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+        },
+        body: JSON.stringify({
+          AuthFlow: "REFRESH_TOKEN_AUTH",
+          ClientId: clientId,
+          AuthParameters: { REFRESH_TOKEN: refreshToken },
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (data.AuthenticationResult?.IdToken) {
+        localStorage.setItem("id_token", data.AuthenticationResult.IdToken);
+        localStorage.setItem("cloudstock_id_token", data.AuthenticationResult.IdToken);
+        if (data.AuthenticationResult.AccessToken) {
+          localStorage.setItem("access_token", data.AuthenticationResult.AccessToken);
+        }
+      } else {
+        ApiService.Auth.logout();
+        window.location.reload();
+      }
+    } catch {
+      ApiService.Auth.logout();
+      window.location.reload();
+    }
+  }
+
   async function _fetchAPI(method, path, body = null, additionalHeaders = {}) {
+    const currentToken = _getToken();
+    if (currentToken && !_isTokenValid(currentToken)) {
+      await _refreshTokenIfPossible();
+    }
+
     const isLocal = typeof CONFIG !== "undefined" && CONFIG.USE_LOCAL_API;
     const baseUrl = isLocal
       ? ((typeof CONFIG !== "undefined" && CONFIG.API_BASE_URL) || "http://localhost:3001")
@@ -324,16 +386,24 @@ const ApiService = (() => {
   const Transactions = {
     async getAll() {
       if (_usesMockData("transactions")) return _mockGetAll("transactions");
-      const res = await _fetchAllPages("/transactions");
-      if (Array.isArray(res.data)) {
-        res.data.forEach((t) => {
-          if (t.amount === undefined && t.quantity !== undefined) t.amount = t.quantity;
-          if (t.quantity === undefined && t.amount !== undefined) t.quantity = t.amount;
-          if (t.type === "IMPORT") t.type = "IN";
-          else if (t.type === "EXPORT") t.type = "OUT";
-        });
+      try {
+        const res = await _fetchAllPages("/transactions");
+        if (Array.isArray(res.data)) {
+          res.data.forEach((t) => {
+            if (t.amount === undefined && t.quantity !== undefined) t.amount = t.quantity;
+            if (t.quantity === undefined && t.amount !== undefined) t.quantity = t.amount;
+            if (t.type === "IMPORT") t.type = "IN";
+            else if (t.type === "EXPORT") t.type = "OUT";
+          });
+        }
+        return res;
+      } catch (err) {
+        console.warn("Lỗi tải /transactions từ API, chuyển sang mock dữ liệu:", err.message);
+        if (typeof MockDataStore !== "undefined") {
+          return _mockGetAll("transactions");
+        }
+        throw err;
       }
-      return res;
     },
 
     async getById(transactionId) {
@@ -369,17 +439,23 @@ const ApiService = (() => {
         return _wrapResponse(created);
       }
 
+      // ✅ FIX 4: Chỉ gửi invoiceKey khi có giá trị, tránh backend validate null
       const payload = {
-        type: transaction.type,                                                          
+        type: transaction.type,
         productId: transaction.productId,
-        amount: Number(transaction.amount ?? transaction.quantity) || 0,                 
+        amount: Number(transaction.amount ?? transaction.quantity) || 0,
         supplierId: transaction.supplierId || null,
         reason: transaction.reason || transaction.fullReason || (transaction.type === "IN" ? "Nhập kho" : "Xuất kho"),
-        invoiceKey: transaction.invoiceKey || null,                                      
       };
+      if (transaction.invoiceKey) {
+        payload.invoiceKey = transaction.invoiceKey;
+      }
+      if (transaction.invoiceReservationId) {
+        payload.invoiceReservationId = transaction.invoiceReservationId;
+      }
 
       const res = await _fetchAPI("POST", "/transactions", payload, {
-        "Idempotency-Key": crypto.randomUUID(),                                          
+        "Idempotency-Key": crypto.randomUUID(),
       });
       return _wrapResponse(res);
     },
@@ -733,7 +809,6 @@ const ApiService = (() => {
       let accessToken = null;
       let refreshToken = null;
 
-      // 1. Thử xác thực SRP (USER_SRP_AUTH) nếu SDK amazon-cognito-identity-js đã nạp
       if (typeof AmazonCognitoIdentity !== "undefined") {
         const pool = new AmazonCognitoIdentity.CognitoUserPool({
           UserPoolId: userPoolId,
@@ -788,7 +863,6 @@ const ApiService = (() => {
           accessToken = srpResult.accessToken;
           refreshToken = srpResult.refreshToken;
         } catch (srpErr) {
-          // Thử lại nếu có khả năng sai khoảng trắng đầu mật khẩu
           if (srpErr.name === "NotAuthorizedException") {
             try {
               const altPwd = password.startsWith(" ") ? password.trim() : " " + password;
@@ -808,7 +882,6 @@ const ApiService = (() => {
           }
         }
       } else {
-        // 2. Dự phòng trực tiếp qua REST API (USER_PASSWORD_AUTH)
         const cognitoEndpoint = `https://cognito-idp.${region}.amazonaws.com/`;
         async function attemptAuth(pwd) {
           return fetch(cognitoEndpoint, {
