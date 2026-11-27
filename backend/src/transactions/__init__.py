@@ -8,6 +8,7 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 
@@ -305,15 +306,12 @@ def _normalize_transaction_type(input_data):
     return legacy_type, canonical_type
 
 
-# ✅ FIX: Bỏ dependency schema_compat, viết lại trực tiếp
 def _normalize_product_quantity(product):
     """Lấy stockQuantity từ product, hỗ trợ cả field quantity và stockQuantity"""
-    # Ưu tiên stockQuantity, fallback sang quantity
     for field in ("stockQuantity", "quantity"):
         value = product.get(field)
         if value is None:
             continue
-        # Chuyển Decimal sang int nếu là số nguyên
         if isinstance(value, Decimal):
             if value.is_finite() and value == value.to_integral_value():
                 value = int(value)
@@ -355,7 +353,6 @@ def _validate_transaction(input_data):
     if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
         raise ApiError(400, "INVALID_AMOUNT", "amount phải là số nguyên dương.")
     reason = input_data.get("reason", "").strip() if isinstance(input_data.get("reason"), str) else ""
-    # ✅ FIX: reason chỉ bắt buộc cho EXPORT (OUT), IMPORT không cần
     if transaction_type == "OUT":
         if not reason or len(reason) > 500:
             raise ApiError(400, "INVALID_REASON", "reason là bắt buộc cho xuất kho và tối đa 500 ký tự.")
@@ -416,7 +413,11 @@ def _actor(claims):
 
 
 def _serialize(value):
-    return {key: _serializer.serialize(item) for key, item in value.items()}
+    return {
+        key: _serializer.serialize(item)
+        for key, item in value.items()
+        if item is not None
+    }
 
 
 def _request_hash(transaction):
@@ -438,7 +439,28 @@ def _idempotency_key(event):
 
 
 def _get_item(table_name, key):
-    return dynamodb.Table(table_name).get_item(Key=key, ConsistentRead=True).get("Item")
+    table = dynamodb.Table(table_name)
+    try:
+        return table.get_item(Key=key, ConsistentRead=True).get("Item")
+    except ClientError as err:
+        if err.response.get("Error", {}).get("Code") == "ValidationException" and "schema" in str(err).lower():
+            # Khi bảng có composite primary key (ví dụ: HASH transactionId + RANGE createdAt)
+            # nhưng truy vấn chỉ có HASH key, tự động chuyển sang Query với Limit=1
+            key_name, key_val = next(iter(key.items()))
+            try:
+                res = table.query(
+                    KeyConditionExpression=Key(key_name).eq(key_val),
+                    Limit=1,
+                    ConsistentRead=True,
+                )
+            except ClientError:
+                res = table.query(
+                    KeyConditionExpression=Key(key_name).eq(key_val),
+                    Limit=1,
+                )
+            items = res.get("Items", [])
+            return items[0] if items else None
+        raise
 
 
 def _respond_existing(transaction, request_hash):
@@ -454,7 +476,7 @@ def handler(event, context=None):
     products_table = _products_table_name()
     suppliers_table = _suppliers_table_name()
     method = event.get("httpMethod")
-    transaction_id = (event.get("pathParameters") or {}).get("transactionId")
+    path_transaction_id = (event.get("pathParameters") or {}).get("transactionId")
     resource = event.get("resource")
     path = event.get("path", "")
 
@@ -463,14 +485,13 @@ def handler(event, context=None):
         or path == "/transactions/invoice-uploads"
     ):
         return _create_invoice_upload(event)
-    if method == "GET" and transaction_id and (
+    if method == "GET" and path_transaction_id and (
         resource == "/transactions/{transactionId}/invoice"
         or path.endswith("/invoice")
     ):
-        return _get_private_invoice(transaction_id)
+        return _get_private_invoice(path_transaction_id)
 
-    if method == "GET" and not transaction_id:
-        # ✅ Ưu tiên Query qua GSI ByCreatedAt; nếu GSI chưa được tạo trên DynamoDB thì fallback sang scan để không crash 500
+    if method == "GET" and not path_transaction_id:
         try:
             page = query_page(
                 _table("TRANSACTIONS_TABLE"),
@@ -492,12 +513,12 @@ def handler(event, context=None):
             [_serialize_transaction(item) for item in transactions],
             extra={"nextToken": page["nextToken"]} if page["nextToken"] else None,
         )
-    if method == "GET" and transaction_id:
-        item = _get_item(transactions_table, {"transactionId": transaction_id})
+    if method == "GET" and path_transaction_id:
+        item = _get_item(transactions_table, {"transactionId": path_transaction_id})
         if not item or _is_upload_reservation(item):
             raise ApiError(404, "TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch.")
         return success(_serialize_transaction(item))
-    if method == "POST" and not transaction_id:
+    if method == "POST" and not path_transaction_id:
         transaction_input = _validate_transaction(parse_body(event))
         invoice_reservation_id = transaction_input.pop("invoiceReservationId")
         claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
