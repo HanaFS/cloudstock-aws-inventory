@@ -24,13 +24,17 @@ const ReportsModule = (() => {
     }
 
     try {
-      const [txnRes, supRes] = await Promise.all([
+      const [txnRes, supRes] = await Promise.allSettled([
         ApiService.Transactions.getAll(),
         ApiService.Suppliers.getAll(),
       ]);
 
-      const rawTxns = txnRes.data || [];
-      const suppliers = supRes.data || [];
+      const rawTxns = (txnRes.status === "fulfilled" && txnRes.value?.data) ? txnRes.value.data : [];
+      const suppliers = (supRes.status === "fulfilled" && supRes.value?.data) ? supRes.value.data : [];
+
+      if (txnRes.status === "rejected") {
+        console.warn("Không thể tải giao dịch từ API:", txnRes.reason);
+      }
 
        
       const supMap = {};
@@ -43,7 +47,11 @@ const ReportsModule = (() => {
           ...t,
           supplierName: t.supplierId ? supMap[t.supplierId] || t.supplierId : "",
         }))
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        .sort((a, b) => {
+          const timeA = new Date(a.timestamp || a.createdAt || 0).getTime();
+          const timeB = new Date(b.timestamp || b.createdAt || 0).getTime();
+          return timeB - timeA;
+        });
 
       populatePerformerFilter();
       renderTransactionsTable();
@@ -54,6 +62,7 @@ const ReportsModule = (() => {
       }
     }
   }
+
 
   function populatePerformerFilter() {
     const select = document.getElementById("report-filter-performer");
@@ -81,7 +90,16 @@ const ReportsModule = (() => {
         (t.transactionId && t.transactionId.toLowerCase().includes(kw));
 
        
-      const matchType = filterTxnType === "ALL" || t.type === filterTxnType;
+      let matchType = filterTxnType === "ALL";
+      if (!matchType) {
+        if (filterTxnType === "IN") {
+          matchType = t.type === "IN" || t.type === "IMPORT";
+        } else if (filterTxnType === "OUT") {
+          matchType = t.type === "OUT" || t.type === "EXPORT";
+        } else {
+          matchType = t.type === filterTxnType;
+        }
+      }
 
        
       const matchPerformer =
@@ -115,32 +133,34 @@ const ReportsModule = (() => {
 
     tbody.innerHTML = filtered
       .map((t) => {
-        const isIN = t.type === "IN";
+        const isIN = t.type === "IN" || t.type === "IMPORT";
         const typeBadge = isIN
           ? `<span class="badge badge-in">NHẬP KHO</span>`
           : `<span class="badge badge-out">XUẤT KHO</span>`;
 
+        const amount = Number(t.amount ?? t.quantity) || 0;
         const amountFormatted = isIN
-          ? `<span class="text-success font-semibold">+${formatNumber(t.amount)}</span>`
-          : `<span class="text-danger font-semibold">-${formatNumber(t.amount)}</span>`;
+          ? `<span class="text-success font-semibold">+${formatNumber(amount)}</span>`
+          : `<span class="text-danger font-semibold">-${formatNumber(amount)}</span>`;
 
         let reasonOrSupplier = t.reason || "-";
         if (isIN && t.supplierName) {
-          reasonOrSupplier = `NCC: ${t.supplierName}${t.reason ? `(${t.reason})` : ""}`;
+          reasonOrSupplier = `NCC: ${t.supplierName}${t.reason ? ` (${t.reason})` : ""}`;
         }
 
-        const invoiceLink = t.invoiceUrl
-          ? `<a href="javascript:void(0)" class="badge badge-info" onclick="ReportsModule.viewInvoice('${t.transactionId}')" title="${t.invoiceUrl}">Xem chứng từ S3</a>`
+        const invoiceUrl = t.invoiceUrl || t.invoiceKey;
+        const invoiceLink = invoiceUrl
+          ? `<a href="javascript:void(0)" class="badge badge-info" onclick="ReportsModule.viewInvoice('${t.transactionId}')" title="${invoiceUrl}">Xem chứng từ S3</a>`
           : `<span class="text-muted">-</span>`;
 
         return `
           <tr>
             <td class="col-mono"><strong>${t.transactionId}</strong></td>
-            <td class="col-mono text-xs">${formatDateTime(t.timestamp)}</td>
-            <td><span class="text-muted">${t.performedBy || "-"}</span></td>
+            <td class="col-mono text-xs">${formatDateTime(t.timestamp || t.createdAt)}</td>
+            <td><span class="text-muted">${t.performedBy || t.createdBy || "-"}</span></td>
             <td>${typeBadge}</td>
             <td class="col-mono"><strong>${t.productId}</strong></td>
-            <td><strong>${t.productName}</strong></td>
+            <td><strong>${t.productName || "-"}</strong></td>
             <td class="col-r">${amountFormatted}</td>
             <td class="cell-wrap-text">${reasonOrSupplier}</td>
             <td class="col-c">${invoiceLink}</td>
@@ -177,14 +197,14 @@ const ReportsModule = (() => {
     const rows = filtered.map((t, idx) => ({
       STT: idx + 1,
       "Ma Giao Dich": t.transactionId,
-      "Ngay Gio": formatDateTimeFull(t.timestamp),
-      "Nguoi Thuc Hien": t.performedBy || "",
-      "Loại Thao Tác": t.type === "IN" ? "Nhập kho" : "Xuất kho",
+      "Ngay Gio": formatDateTimeFull(t.timestamp || t.createdAt),
+      "Nguoi Thuc Hien": t.performedBy || t.createdBy || "",
+      "Loại Thao Tác": (t.type === "IN" || t.type === "IMPORT") ? "Nhập kho" : "Xuất kho",
       "Ma San Pham": t.productId,
-      "Ten San Pham": t.productName,
-      "So Luong": t.amount,
+      "Ten San Pham": t.productName || "",
+      "So Luong": Number(t.amount ?? t.quantity) || 0,
       "Lý Do / Nhà Cung Cấp": t.supplierName ? `NCC: ${t.supplierName} (${t.reason || ""})` : t.reason || "",
-      "Chứng Từ S3": t.invoiceUrl || "Không có",
+      "Chứng Từ S3": t.invoiceUrl || t.invoiceKey || "Không có",
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -231,11 +251,11 @@ const ReportsModule = (() => {
     const nowStr = `${now.toLocaleDateString("vi-VN")} ${now.toLocaleTimeString("vi-VN")}`;
 
     const totalIn = filtered
-      .filter((t) => t.type === "IN")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "IN" || t.type === "IMPORT")
+      .reduce((sum, t) => sum + (Number(t.amount ?? t.quantity) || 0), 0);
     const totalOut = filtered
-      .filter((t) => t.type === "OUT")
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter((t) => t.type === "OUT" || t.type === "EXPORT")
+      .reduce((sum, t) => sum + (Number(t.amount ?? t.quantity) || 0), 0);
 
     const printContainer = document.createElement("div");
     printContainer.className = "pdf-report-container";
@@ -284,22 +304,26 @@ const ReportsModule = (() => {
           ${filtered
             .slice(0, 35)
             .map(
-              (t) => `
+              (t) => {
+                const isIN = t.type === "IN" || t.type === "IMPORT";
+                const amount = Number(t.amount ?? t.quantity) || 0;
+                return `
             <tr class="pdf-tr">
               <td class="pdf-td col-mono"><strong>${t.transactionId}</strong></td>
-              <td class="pdf-td col-mono">${formatDateTime(t.timestamp)}</td>
-              <td class="pdf-td">${t.performedBy || "-"}</td>
-              <td class="pdf-td-c font-semibold ${t.type === "IN" ? "text-success" : "text-danger"}">
-                ${t.type === "IN" ? "NHẬP" : "XUẤT"}
+              <td class="pdf-td col-mono">${formatDateTime(t.timestamp || t.createdAt)}</td>
+              <td class="pdf-td">${t.performedBy || t.createdBy || "-"}</td>
+              <td class="pdf-td-c font-semibold ${isIN ? "text-success" : "text-danger"}">
+                ${isIN ? "NHẬP" : "XUẤT"}
               </td>
               <td class="pdf-td col-mono">${t.productId}</td>
-              <td class="pdf-td">${t.productName}</td>
+              <td class="pdf-td">${t.productName || "-"}</td>
               <td class="pdf-td-r font-semibold">
-                ${t.type === "IN" ? "+" : "-"}${formatNumber(t.amount)}
+                ${isIN ? "+" : "-"}${formatNumber(amount)}
               </td>
               <td class="pdf-td text-secondary">${t.supplierName ? `NCC: ${t.supplierName}` : t.reason || "-"}</td>
             </tr>
-          `
+          `;
+              }
             )
             .join("")
           }

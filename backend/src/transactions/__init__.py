@@ -30,8 +30,38 @@ INVOICE_FORMATS = {
 _serializer = TypeSerializer()
 
 
+def _env_var(*names):
+    for n in names:
+        val = os.environ.get(n)
+        if val:
+            return val
+    raise KeyError(f"Missing required environment variable, looked for: {names}")
+
+
+def _transactions_table_name():
+    return _env_var("TABLE_TRANSACTIONS", "TRANSACTIONS_TABLE")
+
+
+def _products_table_name():
+    return _env_var("TABLE_PRODUCTS", "PRODUCTS_TABLE")
+
+
+def _suppliers_table_name():
+    return _env_var("TABLE_SUPPLIERS", "SUPPLIERS_TABLE")
+
+
+def _invoices_bucket_name():
+    return _env_var("BUCKET_NAME", "INVOICES_BUCKET")
+
+
 def _table(name):
-    return dynamodb.Table(os.environ[name])
+    if name in ("TRANSACTIONS_TABLE", "TABLE_TRANSACTIONS"):
+        return dynamodb.Table(_transactions_table_name())
+    if name in ("PRODUCTS_TABLE", "TABLE_PRODUCTS"):
+        return dynamodb.Table(_products_table_name())
+    if name in ("SUPPLIERS_TABLE", "TABLE_SUPPLIERS"):
+        return dynamodb.Table(_suppliers_table_name())
+    return dynamodb.Table(_env_var(name))
 
 
 def _client():
@@ -83,7 +113,7 @@ def _invoice_reservation(identifier, subject, transaction_id, product_id, allow_
     if not isinstance(identifier, str) or not INVOICE_RESERVATION_PATTERN.fullmatch(identifier):
         raise ApiError(404, "UPLOAD_RESERVATION_NOT_FOUND", "Invoice upload reservation not found.")
     reservation = _get_item(
-        os.environ["TRANSACTIONS_TABLE"], {"transactionId": f"UPLOAD#{identifier}"}
+        _transactions_table_name(), {"transactionId": f"UPLOAD#{identifier}"}
     )
     if not reservation or reservation.get("recordType") != "UPLOAD_RESERVATION" or reservation.get("reservationType") != "INVOICE":
         raise ApiError(404, "UPLOAD_RESERVATION_NOT_FOUND", "Invoice upload reservation not found.")
@@ -114,7 +144,7 @@ def _invoice_reservation(identifier, subject, transaction_id, product_id, allow_
 
 def _verify_invoice_object(reservation):
     s3 = _s3_client()
-    bucket = os.environ["INVOICES_BUCKET"]
+    bucket = _invoices_bucket_name()
     key = reservation["s3Key"]
     try:
         metadata = s3.head_object(Bucket=bucket, Key=key)
@@ -170,7 +200,7 @@ def _create_invoice_upload(event):
     upload_url = _s3_client().generate_presigned_url(
         "put_object",
         Params={
-            "Bucket": os.environ["INVOICES_BUCKET"],
+            "Bucket": _invoices_bucket_name(),
             "Key": object_key,
             "ContentType": content_type,
             "ContentLength": size_bytes,
@@ -209,7 +239,7 @@ def _invoice_reference(transaction):
 
 
 def _get_private_invoice(transaction_id):
-    transaction = _get_item(os.environ["TRANSACTIONS_TABLE"], {"transactionId": transaction_id})
+    transaction = _get_item(_transactions_table_name(), {"transactionId": transaction_id})
     if not transaction or _is_upload_reservation(transaction):
         raise ApiError(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")
     object_key = _invoice_reference(transaction)
@@ -218,7 +248,7 @@ def _get_private_invoice(transaction_id):
         if not isinstance(reservation_id, str) or not INVOICE_RESERVATION_PATTERN.fullmatch(reservation_id):
             raise ApiError(409, "INVALID_INVOICE_REFERENCE", "Transaction invoice reservation is invalid.")
         reservation = _get_item(
-            os.environ["TRANSACTIONS_TABLE"], {"transactionId": f"UPLOAD#{reservation_id}"}
+            _transactions_table_name(), {"transactionId": f"UPLOAD#{reservation_id}"}
         )
         if (
             not reservation
@@ -231,14 +261,14 @@ def _get_private_invoice(transaction_id):
             raise ApiError(409, "INVALID_INVOICE_REFERENCE", "Invoice reservation does not match the transaction.")
     s3 = _s3_client()
     try:
-        s3.head_object(Bucket=os.environ["INVOICES_BUCKET"], Key=object_key)
+        s3.head_object(Bucket=_invoices_bucket_name(), Key=object_key)
     except ClientError as error:
         if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
             raise ApiError(404, "INVOICE_NOT_FOUND", "Invoice object was not found.") from error
         raise
     download_url = s3.generate_presigned_url(
         "get_object",
-        Params={"Bucket": os.environ["INVOICES_BUCKET"], "Key": object_key},
+        Params={"Bucket": _invoices_bucket_name(), "Key": object_key},
         ExpiresIn=INVOICE_URL_TTL_SECONDS,
         HttpMethod="GET",
     )
@@ -275,17 +305,24 @@ def _normalize_transaction_type(input_data):
     return legacy_type, canonical_type
 
 
+# ✅ FIX: Bỏ dependency schema_compat, viết lại trực tiếp
 def _normalize_product_quantity(product):
-    try:
-        compatible = dict(product)
-        for field in ("quantity", "stockQuantity"):
-            value = compatible.get(field)
-            if isinstance(value, Decimal) and value.is_finite() and value == value.to_integral_value():
-                compatible[field] = int(value)
-        return normalize_product(compatible)["stockQuantity"]
-    except CompatibilityError as error:
-        code = "PRODUCT_DATA_CONFLICT" if error.code == "FIELD_CONFLICT" else "INVALID_STOCK_STATE"
-        raise ApiError(409, code, "Product stock fields are missing, invalid, or conflicting.") from error
+    """Lấy stockQuantity từ product, hỗ trợ cả field quantity và stockQuantity"""
+    # Ưu tiên stockQuantity, fallback sang quantity
+    for field in ("stockQuantity", "quantity"):
+        value = product.get(field)
+        if value is None:
+            continue
+        # Chuyển Decimal sang int nếu là số nguyên
+        if isinstance(value, Decimal):
+            if value.is_finite() and value == value.to_integral_value():
+                value = int(value)
+            else:
+                raise ApiError(409, "INVALID_STOCK_STATE", "Tồn kho sản phẩm không hợp lệ.")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ApiError(409, "INVALID_STOCK_STATE", "Tồn kho sản phẩm không hợp lệ.")
+        return value
+    raise ApiError(409, "INVALID_STOCK_STATE", "Tồn kho sản phẩm không hợp lệ.")
 
 
 def _is_upload_reservation(transaction):
@@ -318,8 +355,12 @@ def _validate_transaction(input_data):
     if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
         raise ApiError(400, "INVALID_AMOUNT", "amount phải là số nguyên dương.")
     reason = input_data.get("reason", "").strip() if isinstance(input_data.get("reason"), str) else ""
-    if not reason or len(reason) > 500:
-        raise ApiError(400, "INVALID_REASON", "reason là bắt buộc và tối đa 500 ký tự.")
+    # ✅ FIX: reason chỉ bắt buộc cho EXPORT (OUT), IMPORT không cần
+    if transaction_type == "OUT":
+        if not reason or len(reason) > 500:
+            raise ApiError(400, "INVALID_REASON", "reason là bắt buộc cho xuất kho và tối đa 500 ký tự.")
+    elif len(reason) > 500:
+        raise ApiError(400, "INVALID_REASON", "reason tối đa 500 ký tự.")
     supplier_id = input_data.get("supplierId") or None
     if supplier_id is not None and (not isinstance(supplier_id, str) or len(supplier_id) > 64):
         raise ApiError(400, "INVALID_SUPPLIER_ID", "supplierId không hợp lệ.")
@@ -342,30 +383,27 @@ def _validate_transaction(input_data):
 def _serialize_transaction(transaction):
     if _is_upload_reservation(transaction):
         raise ApiError(404, "TRANSACTION_NOT_FOUND", "Transaction not found.")
-    try:
-        compatible = dict(transaction)
-        for field in ("amount", "quantity"):
-            value = compatible.get(field)
-            if isinstance(value, Decimal) and value.is_finite() and value == value.to_integral_value():
-                compatible[field] = int(value)
-        normalized = normalize_transaction(compatible)
-    except CompatibilityError as error:
-        raise ApiError(409, "INVALID_TRANSACTION_DATA", "Transaction fields are incomplete or conflicting.") from error
+    compatible = dict(transaction)
+    for field in ("amount", "quantity"):
+        value = compatible.get(field)
+        if isinstance(value, Decimal) and value.is_finite() and value == value.to_integral_value():
+            compatible[field] = int(value)
+    invoice = compatible.get("invoiceKey") or compatible.get("invoiceUrl") or None
     return {
-        "transactionId": normalized["transactionId"],
-        "timestamp": normalized["timestamp"],
-        "createdAt": normalized["createdAt"],
-        "performedBy": normalized["performedBy"],
-        "type": normalized["type"],
-        "canonicalType": normalized["canonicalType"],
-        "productId": normalized["productId"],
-        "productName": normalized["productName"],
-        "amount": normalized["amount"],
-        "quantity": normalized["quantity"],
-        "supplierId": normalized.get("supplierId"),
-        "reason": normalized.get("reason"),
-        "invoiceKey": normalized.get("invoiceKey", normalized.get("invoiceUrl")),
-        "invoiceUrl": normalized.get("invoiceUrl", normalized.get("invoiceKey")),
+        "transactionId": compatible["transactionId"],
+        "timestamp": compatible.get("timestamp", compatible.get("createdAt")),
+        "createdAt": compatible.get("createdAt", compatible.get("timestamp")),
+        "performedBy": compatible["performedBy"],
+        "type": compatible["type"],
+        "canonicalType": compatible.get("canonicalType"),
+        "productId": compatible["productId"],
+        "productName": compatible.get("productName"),
+        "amount": compatible.get("amount", compatible.get("quantity")),
+        "quantity": compatible.get("quantity", compatible.get("amount")),
+        "supplierId": compatible.get("supplierId"),
+        "reason": compatible.get("reason"),
+        "invoiceKey": invoice,
+        "invoiceUrl": invoice,
     }
 
 
@@ -412,9 +450,9 @@ def _respond_existing(transaction, request_hash):
 @with_error_handling
 def handler(event, context=None):
     require_any_group(event, ["Admin", "Staff"])
-    transactions_table = os.environ["TRANSACTIONS_TABLE"]
-    products_table = os.environ["PRODUCTS_TABLE"]
-    suppliers_table = os.environ["SUPPLIERS_TABLE"]
+    transactions_table = _transactions_table_name()
+    products_table = _products_table_name()
+    suppliers_table = _suppliers_table_name()
     method = event.get("httpMethod")
     transaction_id = (event.get("pathParameters") or {}).get("transactionId")
     resource = event.get("resource")
@@ -432,17 +470,28 @@ def handler(event, context=None):
         return _get_private_invoice(transaction_id)
 
     if method == "GET" and not transaction_id:
-        page = query_page(
-            _table("TRANSACTIONS_TABLE"),
-            event,
-            IndexName="ByTimestamp",
-            KeyConditionExpression="#gsi1pk = :partition",
-            ExpressionAttributeNames={"#gsi1pk": "gsi1pk"},
-            ExpressionAttributeValues={":partition": "TRANSACTION"},
-            ScanIndexForward=True,
-        )
+        # ✅ Ưu tiên Query qua GSI ByCreatedAt; nếu GSI chưa được tạo trên DynamoDB thì fallback sang scan để không crash 500
+        try:
+            page = query_page(
+                _table("TRANSACTIONS_TABLE"),
+                event,
+                IndexName="ByCreatedAt",
+                KeyConditionExpression="#gsi1pk = :partition",
+                ExpressionAttributeNames={"#gsi1pk": "gsi1pk"},
+                ExpressionAttributeValues={":partition": "TRANSACTION"},
+                ScanIndexForward=True,
+            )
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "ValidationException":
+                from ..common.dynamodb import scan_page
+                page = scan_page(_table("TRANSACTIONS_TABLE"), event, ["transactionId", "createdAt"])
+            else:
+                raise
         transactions = [item for item in page["items"] if not _is_upload_reservation(item)]
-        return success([_serialize_transaction(item) for item in transactions], extra={"nextToken": page["nextToken"]} if page["nextToken"] else None)
+        return success(
+            [_serialize_transaction(item) for item in transactions],
+            extra={"nextToken": page["nextToken"]} if page["nextToken"] else None,
+        )
     if method == "GET" and transaction_id:
         item = _get_item(transactions_table, {"transactionId": transaction_id})
         if not item or _is_upload_reservation(item):

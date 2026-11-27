@@ -1,9 +1,9 @@
 const DEPLOY_OUTPUTS = {
-  API_BASE_URL: "https://1mj1230a5d.execute-api.ap-southeast-1.amazonaws.com/dev",                 
-  USER_POOL_ID: "ap-southeast-1_yvqtdZ5Tb",                         
-  USER_POOL_CLIENT_ID: "3a6f7hfuflr5rhi7bqhnqo3gc7",    
-  COGNITO_DOMAIN: "https://cloudstock-nhom4-202600.auth.ap-southeast-1.amazoncognito.com",    
-  ASSETS_BUCKET: "cloudstock-assets-dev-925268418306-ap-southeast-1"   
+  API_BASE_URL: "https://1mj1230a5d.execute-api.ap-southeast-1.amazonaws.com/dev",
+  USER_POOL_ID: "ap-southeast-1_yvqtdZ5Tb",
+  USER_POOL_CLIENT_ID: "3a6f7hfuflr5rhi7bqhnqo3gc7",
+  COGNITO_DOMAIN: "https://cloudstock-nhom4-202600.auth.ap-southeast-1.amazoncognito.com",
+  ASSETS_BUCKET: "cloudstock-assets-dev-925268418306-ap-southeast-1"
 };
 
 const IS_LOCAL_DEVELOPMENT =
@@ -50,12 +50,12 @@ async function apiRequest(path, options = {}) {
 }
 
 const CONFIG = Object.freeze({
-USE_MOCK_DATA: false,
-USE_MOCK_AUTH: false,
-USE_LOCAL_API: IS_LOCAL_DEVELOPMENT,
-USE_LOCAL_API_AUTH: IS_LOCAL_DEVELOPMENT,
+  USE_MOCK_DATA: false,
+  USE_MOCK_AUTH: false,
+  USE_LOCAL_API: IS_LOCAL_DEVELOPMENT,
+  USE_LOCAL_API_AUTH: IS_LOCAL_DEVELOPMENT,
 
-API_BASE_URL: AWS_CONFIG.API_BASE_URL,
+  API_BASE_URL: AWS_CONFIG.API_BASE_URL,
 
   COGNITO_USER_POOL_ID: AWS_CONFIG.COGNITO.USER_POOL_ID,
   COGNITO_CLIENT_ID: AWS_CONFIG.COGNITO.CLIENT_ID,
